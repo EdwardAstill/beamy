@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Sequence, List, Tuple, Dict
 import numpy as np
 
 from .beam import Beam1D, Support
@@ -317,7 +317,7 @@ def solve_transverse_reactions(beam: Beam1D, loads: LoadCase, axis: str = "z") -
         s.reactions[shear_key]  = float(r[w_dof])
         s.reactions[moment_key] = float(r[t_dof])
 
-from typing import List, Tuple, Dict
+
 
 def get_all_loads(loads: LoadCase, beam: Beam1D) -> List[Tuple[float, str, float]]:
     """
@@ -411,9 +411,21 @@ class LoadedBeam:
         # 3) Store combined applied loads + reactions
         self.all_loads = get_all_loads(self.loads, self.beam)
 
-
-    def bending_moments(self, points: int = 100,axis: str = "y") -> List[Tuple[float, float]]:
-        # later you can use self.all_loads here to build M(x)
-        raise NotImplementedError
-    
-    
+    @dataclass
+    class Shear:
+        axis: str
+        points: int = 100
+        @property
+        def stress(self) -> List[Tuple[float, float]]:
+            return self.all_loads.filter(lambda x: x[1] == "Fy" or x[1] == "Fz")
+        @property
+        def displacement(self) -> List[Tuple[float, float]]:
+            return self.all_loads.filter(lambda x: x[1] == "w")
+    @dataclass
+    class Bending:
+        axis: str
+        points: int = 100
+        @property
+        def stress(self) -> List[Tuple[float, float]]:
+            return self.all_loads.filter(lambda x: x[1] == "My" or x[1] == "Mz")
+        @property
