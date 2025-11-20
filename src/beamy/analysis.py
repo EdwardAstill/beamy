@@ -1,7 +1,7 @@
 # analysis.py
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 import numpy as np
 
@@ -12,60 +12,38 @@ from .loads import LoadCase
 # -------------------------------------------------
 # Axial reactions (Fx)
 # -------------------------------------------------
-def solve_x_forces(
+# -------------------------------------------------
+# Generic 1D chain solver (for forces or moments)
+# -------------------------------------------------
+def _solve_1d_chain(
     supports: Sequence[Support],
-    loads: LoadCase,
-) -> None:
+    q_pairs: list[tuple[float, float]],
+) -> np.ndarray:
     """
-    Compute axial reactions at supports (Fx) for a 1D beam with only axial
-    point loads. Modifies support.reactions['Fx'] in place and returns None.
+    Solve a 1D axial-like chain for reactions at supports, given
+    a list of (x, q) loads (q can be force or moment).
 
-    Args:
-        supports:
-            Sequence of Support objects. Axial displacement (Ux) is assumed
-            to be restrained at these x-positions.
-        loads:
-            LoadCase. Only the axial component Fx is used here
-            (positive = tension along +x).
-
-    Notes:
-        - If there is exactly one axial support, the problem is statically
-          determinate and the reaction is just minus the sum of axial forces.
-        - If there are two or more supports, a 1D axial stiffness chain is
-          used to distribute reactions based on relative segment stiffness
-          (k ~ 1/L between supports). EA is factored out.
-
-        Assumes loads.convert_dforces_to_pforces() has already been called,
-        so all distributed loads are represented as PointForce objects and
-        loads.Fxs returns a list of (x, Fx) pairs.
+    Returns:
+        R : np.ndarray of length len(supports), reactions at each support.
     """
     if not supports:
-        raise ValueError("Beam has no axial supports (no Ux restraint). Unstable.")
-
-    # Reset existing axial reactions
-    for s in supports:
-        s.reactions["Fx"] = 0.0
+        raise ValueError("No supports provided for 1D chain solver.")
 
     # Sort supports by x
     supports_sorted = sorted(supports, key=lambda s: s.x)
     n_supports = len(supports_sorted)
 
-    # List of (x, Fx) from LoadCase
-    pf_list: list[tuple[float, float]] = loads.Fxs
-    # Total external axial force from point loads
-    total_F = sum(Fx for _, Fx in pf_list)
+    # Sort loads by x
+    q_pairs = sorted(q_pairs, key=lambda p: p[0])
+    total_q = sum(q for _, q in q_pairs)
 
-    # -------------------------------------------------
     # Case A: exactly one support → statically determinate
-    # -------------------------------------------------
     if n_supports == 1:
-        supports_sorted[0].reactions["Fx"] = -total_F
-        return
+        R = np.zeros(1, dtype=float)
+        R[0] = -total_q
+        return R
 
-    # -------------------------------------------------
     # Case B: 2+ supports → statically indeterminate
-    # use 1D axial stiffness chain with k_i ∝ 1/L_i
-    # -------------------------------------------------
     x_supports = np.array([s.x for s in supports_sorted], dtype=float)
 
     # Segment lengths between supports
@@ -73,7 +51,7 @@ def solve_x_forces(
     if np.any(lengths <= 0.0):
         raise ValueError("Support positions must be strictly increasing in x.")
 
-    # Element stiffnesses (EA factored out → k_i = 1/L_i)
+    # Element stiffnesses (EA or GJ factored out → k_i = 1/L_i)
     k_list = [1.0 / L_i for L_i in lengths]
 
     # Global stiffness matrix K (n_supports × n_supports)
@@ -84,30 +62,75 @@ def solve_x_forces(
         K[i + 1, i]     -= k
         K[i + 1, i + 1] += k
 
-    # Equivalent nodal loads at supports (collapse point loads)
-    F_support = np.zeros(n_supports, dtype=float)
+    # Equivalent nodal loads at supports (collapse q(x) onto supports)
+    Q_support = np.zeros(n_supports, dtype=float)
 
-    for x_p, Fp in pf_list:
+    for x_p, qp in q_pairs:
         idx = np.searchsorted(x_supports, x_p) - 1
 
         if idx < 0:
-            F_support[0] += Fp
+            Q_support[0] += qp
         elif idx >= n_supports - 1:
-            F_support[-1] += Fp
+            Q_support[-1] += qp
         else:
             xL = x_supports[idx]
             xR = x_supports[idx + 1]
             t = (x_p - xL) / (xR - xL)
-            F_support[idx]     += Fp * (1.0 - t)
-            F_support[idx + 1] += Fp * t
+            Q_support[idx]     += qp * (1.0 - t)
+            Q_support[idx + 1] += qp * t
 
-    # Solve K * R = -F_support for reactions R at each support
-    R = np.linalg.solve(K, -F_support)
+    # Solve K * R = -Q_support for reactions at each support
+    R = np.linalg.solve(K, -Q_support)
+    return R
 
-    # Write reactions back into the Support objects (Fx only)
+
+# -------------------------------------------------
+# Axial + torsional reactions (Fx + Mx)
+# -------------------------------------------------
+def solve_x_reactions(
+    supports: Sequence[Support],
+    loads: LoadCase,
+) -> None:
+    """
+    Compute reactions in the x-direction DOFs:
+        - Axial reactions Fx
+        - Torsional reactions Mx
+
+    Modifies support.reactions['Fx'] and support.reactions['Mx'] in place.
+    Assumes convert_dforces_to_pforces() has already been called.
+    """
+    if not supports:
+        raise ValueError("Beam has no axial/torsional supports. Unstable.")
+
+    # Reset existing reactions in this DOF set
+    for s in supports:
+        s.reactions["Fx"] = 0.0
+        s.reactions["Mx"] = 0.0
+
+    # Sort supports for consistent mapping
+    supports_sorted = sorted(supports, key=lambda s: s.x)
+
+    # ----- Axial: Fx -----
+    Fx_pairs: list[tuple[float, float]] = loads.Fxs  # [(x, Fx)]
+    if Fx_pairs:
+        R_Fx = _solve_1d_chain(supports_sorted, Fx_pairs)
+    else:
+        R_Fx = np.zeros(len(supports_sorted), dtype=float)
+
+    # Write Fx reactions back
     for i, s in enumerate(supports_sorted):
-        s.reactions["Fx"] = float(R[i])
+        s.reactions["Fx"] = float(R_Fx[i])
 
+    # ----- Torsion: Mx -----
+    Mx_pairs: list[tuple[float, float]] = loads.Mxs  # [(x, Mx)]
+    if Mx_pairs:
+        R_Mx = _solve_1d_chain(supports_sorted, Mx_pairs)
+    else:
+        R_Mx = np.zeros(len(supports_sorted), dtype=float)
+
+    # Write Mx reactions back
+    for i, s in enumerate(supports_sorted):
+        s.reactions["Mx"] = float(R_Mx[i])
 
 # -------------------------------------------------
 # Transverse reactions (Fy/Fz + My/Mz)
@@ -294,25 +317,103 @@ def solve_transverse_reactions(beam: Beam1D, loads: LoadCase, axis: str = "z") -
         s.reactions[shear_key]  = float(r[w_dof])
         s.reactions[moment_key] = float(r[t_dof])
 
+from typing import List, Tuple, Dict
+
+def get_all_loads(loads: LoadCase, beam: Beam1D) -> List[Tuple[float, str, float]]:
+    """
+    Returns a sorted list of all loads and support reactions as
+        (x, type, magnitude)
+    where repeated entries at the same x and of the same type are summed.
+    """
+    load_map: Dict[Tuple[float, str], float] = {}
+
+    def add(x: float, type_: str, value: float):
+        key = (float(x), type_)
+        load_map[key] = load_map.get(key, 0.0) + float(value)
+
+    # ---------------------------------------
+    # Applied FORCES
+    # ---------------------------------------
+    for x, Fx in loads.Fxs:
+        if Fx != 0:
+            add(x, "Fx", Fx)
+
+    for x, Fy in loads.Fys:
+        if Fy != 0:
+            add(x, "Fy", Fy)
+
+    for x, Fz in loads.Fzs:
+        if Fz != 0:
+            add(x, "Fz", Fz)
+
+    # ---------------------------------------
+    # Applied MOMENTS
+    # ---------------------------------------
+    for x, Mx in loads.Mxs:
+        if Mx != 0:
+            add(x, "Mx", Mx)
+
+    for x, My in loads.Mys:
+        if My != 0:
+            add(x, "My", My)
+
+    for x, Mz in loads.Mzs:
+        if Mz != 0:
+            add(x, "Mz", Mz)
+
+    # ---------------------------------------
+    # Support reactions
+    # ---------------------------------------
+    for s in beam.supports:
+        x = float(s.x)
+
+        if s.reactions.get("Fx", 0.0) != 0.0: add(x, "Rx", s.reactions["Fx"])
+        if s.reactions.get("Fy", 0.0) != 0.0: add(x, "Ry", s.reactions["Fy"])
+        if s.reactions.get("Fz", 0.0) != 0.0: add(x, "Rz", s.reactions["Fz"])
+
+        if s.reactions.get("Mx", 0.0) != 0.0: add(x, "RMx", s.reactions["Mx"])
+        if s.reactions.get("My", 0.0) != 0.0: add(x, "RMy", s.reactions["My"])
+        if s.reactions.get("Mz", 0.0) != 0.0: add(x, "RMz", s.reactions["Mz"])
+
+    # ---------------------------------------
+    # Convert to sorted list
+    # ---------------------------------------
+    out = [(x, t, val) for (x, t), val in load_map.items()]
+    out.sort(key=lambda item: item[0])
+    return out
+
 
 # -------------------------------------------------
 # Loaded beam wrapper
 # -------------------------------------------------
-@dataclass
 class LoadedBeam:
     beam: Beam1D
     loads: LoadCase
 
-    def analyze(self, points: int = 100):
+    # will be filled in __post_init__, not passed by the user
+    all_loads: List[Tuple[float, str, float]] = field(init=False)
+
+    def __post_init__(self):
+        """
+        Build the full load set on instantiation:
+        - convert distributed loads to point forces
+        - solve for reactions (Fx, Fy/Fz, My/Mz)
+        - assemble everything into all_loads
+        """
         # 1) Turn all distributed forces into point forces
         self.loads.convert_dforces_to_pforces()
 
         # 2) Reactions in each direction
-        solve_x_forces(self.beam.supports, self.loads)
+        solve_x_reactions(self.beam.supports, self.loads)
         solve_transverse_reactions(self.beam, self.loads, axis="y")
         solve_transverse_reactions(self.beam, self.loads, axis="z")
 
-        # TODO:
-        all_loads = get_all_loads(self.loads, self.beam)
-        # - build internal shear/moment/deflection/torsion diagrams
-        #   from these reactions + LoadCase F*/M* resultants
+        # 3) Store combined applied loads + reactions
+        self.all_loads = get_all_loads(self.loads, self.beam)
+
+
+    def bending_moments(self, points: int = 100,axis: str = "y") -> List[Tuple[float, float]]:
+        # later you can use self.all_loads here to build M(x)
+        raise NotImplementedError
+    
+    
