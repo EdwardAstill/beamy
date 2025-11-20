@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List
 
-def validate_node(node: str) -> str:
+def validate_support_type(support: str) -> str:
     """
     Validate node string format.
     
@@ -29,26 +29,26 @@ def validate_node(node: str) -> str:
     Raises:
         ValueError: If node string is invalid
     """
-    if not isinstance(node, str):
-        raise ValueError(f"Support must be a string, got {type(node)}")
-    if len(node) != 6:
-        raise ValueError(f"node string must be exactly 6 digits, got '{node}' (length {len(node)})")
-    if not all(c in '01' for c in node):
-        raise ValueError(f"node string must contain only 0s and 1s, got '{node}'")
-    return node
+    if not isinstance(support, str):
+        raise ValueError(f"Support must be a string, got {type(support)}")
+    if len(support) != 6:
+        raise ValueError(f"node string must be exactly 6 digits, got '{support}' (length {len(support)})")
+    if not all(c in '01' for c in support):
+        raise ValueError(f"node string must contain only 0s and 1s, got '{support}'")
+    return support
 
-def validate_nodes(nodes: List[Node]):
+def validate_support_pairs(supports: List[Support]):
 
-    if not any(node.support[0] == '1' for node in nodes):
+    if not any(support.type[0] == '1' for support in supports):
         raise ValueError("Beam must be supported in x direction at one or more nodes")
-    if not any(node.support[1] == '1' for node in nodes):
+    if not any(support.type[1] == '1' for support in supports):
         raise ValueError("Beam must be supported in y direction at one or more nodes")
-    if not any(node.support[2] == '1' for node in nodes):
+    if not any(support.type[2] == '1' for support in supports):
         raise ValueError("Beam must be supported in z direction at one or more nodes")
-    if not any(node.support[3] == '1' for node in nodes):
+    if not any(support.type[3] == '1' for support in supports):
         raise ValueError("Beam must be supported in rotation about x axis at one or more nodes")
-    for node in nodes:
-        validate_node(node.support)
+    for support in supports:
+        validate_support_type(support.type)
 
 
 @dataclass
@@ -71,19 +71,18 @@ class Section:
     z_max: float  # distance to extreme fibre in +z (m)
 
 @dataclass
-class Node:
-    """
-    A node represents a point along the beam axis with support conditions.
-    
-    x: Position along beam axis (0 <= x <= L)
-    support: 6-digit string representing constraints (validated using validate_support)
-    """
+class Support:
     x: float
-    support: str
-    
+    type: str
+    reactions: dict[str, float] = field(
+        default_factory=lambda: {
+            "Fx": 0.0, "Fy": 0.0, "Fz": 0.0,
+            "Mx": 0.0, "My": 0.0, "Mz": 0.0,
+        }
+    )
+
     def __post_init__(self):
-        """Validate the node string using validate_support."""
-        self.support = validate_node(self.support)
+        self.type = validate_support_type(self.type)
 
 @dataclass
 class Beam1D:
@@ -96,9 +95,9 @@ class Beam1D:
     L: float
     material: Material
     section: Section
-    nodes: List[Node]
+    supports: List[Support]
 
     def __post_init__(self):
-        """Validate the nodes using validate_nodes."""
-        validate_nodes(self.nodes)
-        self.nodes = validate_nodes(self.nodes)
+        """Validate the supports using validate_support_pairs."""
+        validate_support_pairs(self.supports)
+        self.supports = validate_support_pairs(self.supports)

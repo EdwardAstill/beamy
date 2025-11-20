@@ -11,7 +11,7 @@ from .beam import (
     Beam1D,
     Material,
     Section,
-    validate_node,
+    validate_support_type,
 )
 
 from .loads import (
@@ -32,7 +32,7 @@ __all__ = [
     "Beam1D",
     "Material",
     "Section",
-    "validate_node",
+    "validate_support_type",
 
     # loads.py
     "PointLoad",
