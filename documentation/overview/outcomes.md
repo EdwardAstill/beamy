@@ -23,6 +23,8 @@ For my analysis i will break it down liike so:
 
 lb.behaviour(axis, points).quantity.modifier
 
+lb.shear(y, 100).force.max.at(2.5)
+
 behaviours are:
 
 - shear
