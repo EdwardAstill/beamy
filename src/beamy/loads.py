@@ -31,6 +31,7 @@ class LoadCase:
     point_forces: List[PointForce] = field(default_factory=list)
     moments: List[Moment] = field(default_factory=list)
     dist_forces: List[DistributedForce] = field(default_factory=list)
+    dist_force_resolution: int = 11  # Number of points to approximate distributed loads
 
     def add_point_force(self, pf: PointForce):
         self.point_forces.append(pf)
@@ -43,18 +44,30 @@ class LoadCase:
 
     def convert_dforces_to_pforces(self, n_points: int = 11) -> None:
         """
-        Approximate each distributed force by `n_points` equivalent point forces.
-        After this, dist_forces is cleared and only point_forces are used.
+        Deprecated: Helper logic is now handled dynamically in _effective_point_forces.
+        Kept for compatibility if called explicitly, but does nothing to internal state
+        that isn't handled by properties.
         """
-        if n_points < 2:
-            raise ValueError("n_points must be at least 2")
+        pass
 
-        new_point_forces: list[PointForce] = []
+    @property
+    def _effective_point_forces(self) -> List[PointForce]:
+        """
+        Combines explicit point forces with discretized distributed forces.
+        Does NOT modify the internal state of dist_forces.
+        """
+        # Start with explicit point forces
+        all_forces = list(self.point_forces)
+
+        # Discretize distributed forces
+        n_points = self.dist_force_resolution
+        if n_points < 2:
+            n_points = 2
 
         for df in self.dist_forces:
             x_start = df.start_position
             x_end = df.end_position
-            w_start = df.start_force  # [Fx, Fy, Fz] per unit length
+            w_start = df.start_force
             w_end = df.end_force
 
             ts = np.linspace(0.0, 1.0, n_points)
@@ -63,27 +76,24 @@ class LoadCase:
 
             L_total = float(x_end[0] - x_start[0])
             if L_total == 0.0:
-                F_vec = w_start * 0.0
-                new_point_forces.append(PointForce(point=x_start, force=F_vec))
                 continue
 
             dx = L_total / (n_points - 1)
 
             for p, w in zip(pos_interp, w_interp):
                 F_vec = w * dx
-                new_point_forces.append(PointForce(point=p, force=F_vec))
-
-        self.point_forces.extend(new_point_forces)
-        self.dist_forces.clear()
+                all_forces.append(PointForce(point=p, force=F_vec))
+        
+        return all_forces
 
     # --------------------
     # Force resultants
     # --------------------
     @property
     def Fxs(self) -> list[tuple[float, float]]:
-        """List of (x, Fx) from point forces only (d-forces must be pre-discretised)."""
+        """List of (x, Fx) from all forces (explicit + discretized)."""
         forces: list[tuple[float, float]] = []
-        for pf in self.point_forces:
+        for pf in self._effective_point_forces:
             x = float(pf.point[0])
             Fx = float(pf.force[0])
             if Fx != 0.0:
@@ -92,9 +102,9 @@ class LoadCase:
 
     @property
     def Fys(self) -> list[tuple[float, float]]:
-        """List of (x, Fy) from point forces only."""
+        """List of (x, Fy) from all forces."""
         forces: list[tuple[float, float]] = []
-        for pf in self.point_forces:
+        for pf in self._effective_point_forces:
             x = float(pf.point[0])
             Fy = float(pf.force[1])
             if Fy != 0.0:
@@ -103,9 +113,9 @@ class LoadCase:
 
     @property
     def Fzs(self) -> list[tuple[float, float]]:
-        """List of (x, Fz) from point forces only."""
+        """List of (x, Fz) from all forces."""
         forces: list[tuple[float, float]] = []
-        for pf in self.point_forces:
+        for pf in self._effective_point_forces:
             x = float(pf.point[0])
             Fz = float(pf.force[2])
             if Fz != 0.0:
@@ -117,15 +127,11 @@ class LoadCase:
     # --------------------
     @property
     def Mxs(self) -> list[tuple[float, float]]:
-        """
-        List of (x, Mx) including:
-        - torsion from eccentric transverse point forces: Mx = y*Fz - z*Fy
-        - explicit torsional moments Moment.moment[0]
-        """
+        """List of (x, Mx) including torsion from eccentric forces."""
         torsions: list[tuple[float, float]] = []
 
-        # From eccentric point forces
-        for pf in self.point_forces:
+        # From all point forces (explicit + discretized)
+        for pf in self._effective_point_forces:
             x = float(pf.point[0])
             y = float(pf.point[1])
             z = float(pf.point[2])
@@ -145,15 +151,10 @@ class LoadCase:
 
     @property
     def Mys(self) -> list[tuple[float, float]]:
-        """
-        List of (x, My) including:
-        - bending from eccentric axial forces: My = z * Fx
-        - explicit bending moments about y: Moment.moment[1]
-        """
+        """List of (x, My) including bending from eccentric forces."""
         moments: list[tuple[float, float]] = []
 
-        # From eccentric axial point forces
-        for pf in self.point_forces:
+        for pf in self._effective_point_forces:
             x = float(pf.point[0])
             z = float(pf.point[2])
             Fx = float(pf.force[0])
@@ -161,7 +162,6 @@ class LoadCase:
             if My != 0.0:
                 moments.append((x, My))
 
-        # From explicit My moments
         for m in self.moments:
             x = float(m.x)
             My = float(m.moment[1])
@@ -172,15 +172,10 @@ class LoadCase:
 
     @property
     def Mzs(self) -> list[tuple[float, float]]:
-        """
-        List of (x, Mz) including:
-        - bending from eccentric axial forces: Mz = -y * Fx
-        - explicit bending moments about z: Moment.moment[2]
-        """
+        """List of (x, Mz) including bending from eccentric forces."""
         moments: list[tuple[float, float]] = []
 
-        # From eccentric axial point forces
-        for pf in self.point_forces:
+        for pf in self._effective_point_forces:
             x = float(pf.point[0])
             y = float(pf.point[1])
             Fx = float(pf.force[0])
@@ -188,7 +183,6 @@ class LoadCase:
             if Mz != 0.0:
                 moments.append((x, Mz))
 
-        # From explicit Mz moments
         for m in self.moments:
             x = float(m.x)
             Mz = float(m.moment[2])
