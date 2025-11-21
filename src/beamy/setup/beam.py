@@ -1,7 +1,9 @@
 # beam.py
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Tuple, Optional
+
+from ..section import Section, Geometry, Shape
 
 def validate_support_type(support: str) -> str:
     """
@@ -57,18 +59,6 @@ class Material:
     E: float  # Young's modulus (Pa)
     G: float  # Shear modulus (Pa)
 
-@dataclass
-class Section:
-    """
-    Cross-section properties in local coordinates.
-    """
-    name: str
-    A: float   # area (m^2)
-    Iy: float  # second moment about local y (m^4)
-    Iz: float  # second moment about local z (m^4)
-    J: float   # torsion constant (m^4)
-    y_max: float  # distance to extreme fibre in +y (m)
-    z_max: float  # distance to extreme fibre in +z (m)
 
 @dataclass
 class Support:
@@ -100,4 +90,3 @@ class Beam1D:
     def __post_init__(self):
         """Validate the supports using validate_support_pairs."""
         validate_support_pairs(self.supports)
-        self.supports = validate_support_pairs(self.supports)

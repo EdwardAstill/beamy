@@ -1,6 +1,6 @@
 analyse should produce the folowing results a numpy array or list of tuples:
 
-Main analysis
+## Theory
 
 This is how beams behave:
 
@@ -10,6 +10,7 @@ This is how beams behave:
 | **Axial**      | N(x)       | σ(x)       | u(x)         |
 | **Torsion**    | T(x)       | τ(x)       | θ(x)         |
 
+## Main analysis implementation
 For my analysis i will break it down liike so:
 | Behaviour      | Action     | Stress     | Displacement |
 | -------------- | ---------- | ---------- | ------------ |
@@ -52,5 +53,9 @@ also the loaded beam will have a deflection method (that will take axis and poin
 e.g.
 lb.deflection(z, 100).max
 
+## von Mises
 
+i want to have von mises as follows
+
+lb.von_mises(points).modifier
 

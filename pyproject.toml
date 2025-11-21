@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "beamy"
 version = "0.1.0"
@@ -8,3 +12,6 @@ dependencies = [
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]

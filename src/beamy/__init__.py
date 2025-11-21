@@ -1,48 +1,39 @@
-"""
-A lightweight 1D beam analysis package.
-
-Provides:
-- Beam definitions (material, section, supports)
-- Point + distributed loads in local beam coordinates
-- Closed-form static + EB bending analysis for a single beam
-"""
-
-from .beam import (
+from .setup import (
     Beam1D,
     Material,
-    Section,
+    Support,
     validate_support_type,
-)
-
-from .loads import (
-    PointLoad,
-    DistributedLoad,
+    PointForce,
+    DistributedForce,
+    Moment,
     LoadCase,
 )
-
+from .section import Section, Geometry, Shape
 from .analysis import (
-    BeamAnalysisResult,
-    analyze_beam_simple_point_load,
+    Result,
+    AnalysisResult,
+    LoadedBeam,
+    solve_x_reactions,
+    solve_transverse_reactions,
+    get_all_loads,
 )
 
-from . import utils
-
 __all__ = [
-    # beam.py
     "Beam1D",
     "Material",
-    "Section",
+    "Support",
     "validate_support_type",
-
-    # loads.py
-    "PointLoad",
-    "DistributedLoad",
+    "PointForce",
+    "DistributedForce",
+    "Moment",
     "LoadCase",
-
-    # analysis.py
-    "BeamAnalysisResult",
-    "analyze_beam_simple_point_load",
-
-    # utils
-    "utils",
+    "Section",
+    "Geometry",
+    "Shape",
+    "Result",
+    "AnalysisResult",
+    "LoadedBeam",
+    "solve_x_reactions",
+    "solve_transverse_reactions",
+    "get_all_loads",
 ]

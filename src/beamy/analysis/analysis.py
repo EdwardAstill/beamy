@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from typing import Sequence, List, Tuple, Dict, Callable, Optional
 import numpy as np
 
-from .beam import Beam1D, Support
-from .loads import LoadCase
+from ..setup import Beam1D, Support
+from ..setup import LoadCase
 
 
 # -------------------------------------------------
@@ -552,6 +552,8 @@ def _linear_interpolation(
 # -------------------------------------------------
 # Loaded beam wrapper
 # -------------------------------------------------
+from .plotter import plot_beam_diagram
+
 @dataclass
 class LoadedBeam:
     beam: Beam1D
@@ -593,6 +595,55 @@ class LoadedBeam:
 
     def deflection(self, axis: str, points: int = 100) -> Result:
         return self._transverse_analysis(axis, points, mode="bending").displacement
+
+    def von_mises(self, points: int = 100) -> Result:
+        """
+        Calculate the Von Mises stress distribution along the beam.
+        
+        Uses a conservative superposition of maximum stress components:
+        sigma_vm = sqrt(sigma_max^2 + 3 * tau_max^2)
+        
+        where:
+        sigma_max = |sigma_axial| + |sigma_bending_y| + |sigma_bending_z|
+        tau_max = |tau_shear_y| + |tau_shear_z| + |tau_torsion|
+        """
+        # 1. Normal Stresses
+        # Axial (Fx)
+        r_ax = self.axial(points).stress
+        
+        # Bending about Z (Loads in Y) -> produces sigma_x varying with y
+        r_by = self.bending("y", points).stress
+        
+        # Bending about Y (Loads in Z) -> produces sigma_x varying with z
+        r_bz = self.bending("z", points).stress
+        
+        # Sum absolute maximums
+        sigma_total = np.abs(r_ax._values) + np.abs(r_by._values) + np.abs(r_bz._values)
+        
+        # 2. Shear Stresses
+        # Shear in Y
+        r_sy = self.shear("y", points).stress
+        
+        # Shear in Z
+        r_sz = self.shear("z", points).stress
+        
+        # Torsion
+        r_tor = self.torsion(points).stress
+        
+        # Sum absolute maximums
+        tau_total = np.abs(r_sy._values) + np.abs(r_sz._values) + np.abs(r_tor._values)
+        
+        # 3. Von Mises
+        vm_values = np.sqrt(sigma_total**2 + 3 * tau_total**2)
+        
+        return Result(r_ax._x, vm_values)
+
+    def plot(self):
+        """
+        Plot the 3D beam diagram with loads.
+        """
+        plot_beam_diagram(self.beam, self.loads)
+
 
     # ---------------------------------------------------------
     # Internal Analysis Logic
