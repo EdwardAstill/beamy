@@ -446,7 +446,7 @@ def _plot_stress_line(ax, loaded_beam: "LoadedBeam", length: float, n_points: in
     sm.set_array([])
     plt.colorbar(sm, ax=ax, label='Max Von Mises Stress', shrink=0.6, pad=-0.05, )
 
-def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot_section: bool = True):
+def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot_section: bool = True, save_path: Optional[str] = None):
     """
     Plots a 3D beam diagram with:
     - Optional 2D section outline on the YZ plane at x=0 (shear center at origin)
@@ -457,6 +457,7 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
         loaded_beam: LoadedBeam object containing beam, loads, and analysis results.
         plot_stress: If True, color the beam axis by von Mises stress.
         plot_section: If True, draw the section outline at x=0.
+        save_path: If provided, save the plot to this file path instead of showing it.
     """
     beam = loaded_beam.beam
     load_case = loaded_beam.loads
@@ -564,4 +565,8 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     
     ax.view_init(elev=20, azim=-60)
     
-    plt.show()
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close(fig)
+    else:
+        plt.show()
