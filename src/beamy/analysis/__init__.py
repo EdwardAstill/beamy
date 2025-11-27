@@ -6,7 +6,8 @@ from .analysis import (
     solve_transverse_reactions,
     get_all_loads,
 )
-from .plotter import plot_beam_diagram, plot_loads
+from .beam_plotter import plot_beam_diagram, plot_loads
+from .section_plotter import SectionPlotter
 
 __all__ = [
     "Result",
@@ -17,4 +18,5 @@ __all__ = [
     "get_all_loads",
     "plot_beam_diagram",
     "plot_loads",
+    "SectionPlotter",
 ]

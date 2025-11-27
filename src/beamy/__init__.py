@@ -16,6 +16,7 @@ from .analysis import (
     solve_x_reactions,
     solve_transverse_reactions,
     get_all_loads,
+    SectionPlotter,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "solve_x_reactions",
     "solve_transverse_reactions",
     "get_all_loads",
+    "SectionPlotter",
 ]

@@ -217,8 +217,40 @@ def solve_transverse_reactions(beam: Beam1D, loads: LoadCase, axis: str = "z") -
         raise ValueError("Beam has no supports.")
 
     supports_sorted = sorted(beam.supports, key=lambda s: s.x)
-    x_nodes = np.array([s.x for s in supports_sorted], dtype=float)
-    n_nodes = len(supports_sorted)
+    
+    # Check if we need to add nodes at beam endpoints
+    # For cantilevers or loads beyond supports, we need nodes at 0 and L
+    x_min = supports_sorted[0].x
+    x_max = supports_sorted[-1].x
+    need_node_at_0 = x_min > 0.0
+    need_node_at_L = x_max < beam.L
+    
+    # Collect all load positions to see if we need endpoint nodes
+    all_load_x = []
+    for x_p, _ in shear_pairs:
+        all_load_x.append(x_p)
+    for x_p, _ in moment_pairs:
+        all_load_x.append(x_p)
+    
+    if all_load_x:
+        load_x_min = min(all_load_x)
+        load_x_max = max(all_load_x)
+        need_node_at_0 = need_node_at_0 or load_x_min < x_min
+        need_node_at_L = need_node_at_L or load_x_max > x_max
+    
+    # Add implicit nodes at endpoints if needed (with free DOFs)
+    nodes_for_solver = list(supports_sorted)
+    
+    if need_node_at_0:
+        # Add node at x=0 with all DOFs free (no support)
+        nodes_for_solver.insert(0, Support(x=0.0, type="000000"))
+    
+    if need_node_at_L:
+        # Add node at x=L with all DOFs free (no support)
+        nodes_for_solver.append(Support(x=beam.L, type="000000"))
+    
+    x_nodes = np.array([s.x for s in nodes_for_solver], dtype=float)
+    n_nodes = len(nodes_for_solver)
     dof_per_node = 2
 
     # Reset reactions
@@ -280,15 +312,19 @@ def solve_transverse_reactions(beam: Beam1D, loads: LoadCase, axis: str = "z") -
 
     # --- Solve ---
     d, r = _solve_fem_1d(
-        supports_sorted,
+        nodes_for_solver,
         dof_per_node=2,
         k_local_fn=k_hermite,
         f_global_fn=build_load_vector,
         is_fixed_fn=is_fixed
     )
 
-    # Map reactions
-    for i, s in enumerate(supports_sorted):
+    # Map reactions (only for actual supports, not implicit nodes)
+    # Find indices of actual supports in nodes_for_solver by matching x positions
+    support_x_to_index = {s.x: i for i, s in enumerate(nodes_for_solver)}
+    
+    for s in supports_sorted:
+        i = support_x_to_index[s.x]
         w_dof = 2 * i
         t_dof = w_dof + 1
         s.reactions[shear_key] = float(r[w_dof])
@@ -392,6 +428,11 @@ class Result:
     @property
     def min(self) -> float:
         return float(np.min(self._values))
+
+    @property
+    def abs_max(self) -> float:
+        """Maximum absolute value."""
+        return float(np.max(np.abs(self._values)))
 
     @property
     def mean(self) -> float:
@@ -552,7 +593,7 @@ def _linear_interpolation(
 # -------------------------------------------------
 # Loaded beam wrapper
 # -------------------------------------------------
-from .plotter import plot_beam_diagram
+from .beam_plotter import plot_beam_diagram
 
 @dataclass
 class LoadedBeam:
@@ -695,9 +736,20 @@ class LoadedBeam:
         V_vals, M_vals = _accumulate_loads(xs, relevant_forces, relevant_moments)
 
         # 3. Calculate Displacements
-        # Reconstruct support x-locations for element interpolation
+        # Reconstruct node x-locations for element interpolation
+        # Need to include beam endpoints if d_vec was computed with implicit nodes
         supports_sorted = sorted(self.beam.supports, key=lambda s: s.x)
-        x_nodes = np.array([s.x for s in supports_sorted])
+        x_min = supports_sorted[0].x
+        x_max = supports_sorted[-1].x
+        
+        # Build node list matching what solve_transverse_reactions used
+        node_x_list = [s.x for s in supports_sorted]
+        if x_min > 0.0:
+            node_x_list.insert(0, 0.0)
+        if x_max < self.beam.L:
+            node_x_list.append(self.beam.L)
+        
+        x_nodes = np.array(node_x_list)
         
         disps = np.zeros(points)
         if d_vec is not None:

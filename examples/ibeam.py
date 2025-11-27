@@ -1,7 +1,7 @@
 import numpy as np
 from sectiony.library import i_section
 from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam, DistributedForce
-from beamy.analysis.plotter import plot_beam_diagram
+from beamy.analysis.beam_plotter import plot_beam_diagram
 
 # Create an I-beam section
 # d=200mm depth, b=100mm width, tf=10mm flange, tw=6mm web, r=8mm fillet
@@ -27,10 +27,10 @@ loads.add_point_force(PointForce(
     point=np.array([1000, 0, 0]),   # At 1m
     force=np.array([0, -5000, 0])   # 5kN downward
 ))
-loads.add_moment(Moment(
-    x=0,
-    moment=np.array([0, 10000, 1000])
-))
+# loads.add_moment(Moment(
+#     x=0,
+#     moment=np.array([0, 10000, 1000])
+# ))
 loads.add_distributed_force(DistributedForce(
     start_position=np.array([2500, 0, 0]),
     end_position=np.array([1300, 0, 0]),
@@ -41,5 +41,39 @@ loads.add_distributed_force(DistributedForce(
 # Create loaded beam (solves for reactions)
 lb = LoadedBeam(beam, loads)
 
+# Find the location of maximum Von Mises stress
+vm_results = lb.von_mises(points=200)  # Use more points for better resolution
+max_vm_idx = np.argmax(vm_results._values)
+max_vm_x = vm_results._x[max_vm_idx]
+max_vm_val = vm_results._values[max_vm_idx]
+
+print(f"Max Von Mises Stress: {max_vm_val/1e6:.2f} MPa at x = {max_vm_x:.2f} mm")
+
 # Plot the beam with forces and stress coloring
-plot_beam_diagram(lb, plot_stress=True, plot_section=True)
+from beamy import SectionPlotter
+from pathlib import Path
+
+# Create gallery directory if it doesn't exist
+gallery_dir = Path("gallery")
+gallery_dir.mkdir(exist_ok=True)
+
+# Save beam diagram
+plot_beam_diagram(
+    lb, 
+    plot_stress=True, 
+    plot_section=True,
+    save_path=str(gallery_dir / "ibeam_3d_diagram.png")
+)
+
+# Plot section stress at the critical location
+sp = SectionPlotter(lb)
+sp.plot_stress_at(
+    x_pos=max_vm_x, 
+    stress_type="von_mises", 
+    title=f"Max Von Mises Stress Section (x={max_vm_x:.0f}mm)",
+    cmap="plasma",
+    show=False
+)
+import matplotlib.pyplot as plt
+plt.savefig(gallery_dir / "ibeam_section_stress.png", bbox_inches='tight', dpi=300)
+plt.close()

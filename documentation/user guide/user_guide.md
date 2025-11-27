@@ -90,11 +90,21 @@ s1 = Support(x=0.0, type="111111")
 Loads are grouped into a `LoadCase`. You can add:
 * `PointForce(point, force)`: Force vector `[Fx, Fy, Fz]` at `[x, y, z]`. Eccentric loads create moments.
 * `Moment(x, moment)`: Moment vector `[Mx, My, Mz]` at location `x`.
-* `DistributedForce`: (Coming soon/In progress)
+* `DistributedForce(start_position, end_position, start_force, end_force)`: Linearly varying distributed force between two points.
 
 ```python
+from beamy import LoadCase, PointForce, Moment, DistributedForce
+import numpy as np
+
 lc = LoadCase(name="Wind")
 lc.add_point_force(PointForce(point=[2.0, 0, 0], force=[0, 100, 0]))
+lc.add_moment(Moment(x=1.0, moment=[0, 0, 5000]))
+lc.add_distributed_force(DistributedForce(
+    start_position=np.array([0, 0, 0]),
+    end_position=np.array([5, 0, 0]),
+    start_force=np.array([0, -1000, 0]),
+    end_force=np.array([0, -2000, 0])
+))
 ```
 
 ### 4. Analysis
@@ -105,13 +115,12 @@ lb = LoadedBeam(beam, load_case)
 ```
 
 You can query specific behaviors using these methods:
-* `lb.shear(axis, points=100)`
-* `lb.bending(axis, points=100)`
-* `lb.axial(points=100)`
-* `lb.torsion(points=100)`
-* `lb.deflection(axis, points=100)`
-* `lb.von_mises(points=100)`
-* `lb.plot()` - Plot 3D beam diagram with loads
+* `lb.shear(axis, points=100)` - Shear force distribution
+* `lb.bending(axis, points=100)` - Bending moment distribution
+* `lb.axial(points=100)` - Axial force distribution
+* `lb.torsion(points=100)` - Torsional moment distribution
+* `lb.deflection(axis, points=100)` - Deflection distribution
+* `lb.von_mises(points=100)` - Von Mises stress distribution along the beam
 
 `axis` must be `"y"` or `"z"`.
 * Bending about **z-axis** corresponds to loads in the **y-direction** (and vice versa depending on coordinate conventions, checking standard engineering axes is recommended). In `beamy`:
@@ -143,9 +152,89 @@ for x, val in res:
 vm = lb.von_mises(points=100)
 print(f"Max von Mises: {vm.max}")
 
-# Plot the beam
+# Plot the beam (convenience method)
 lb.plot()  # Shows 3D diagram with loads
 lb.plot(plot_stress=True)  # Shows 3D diagram with von Mises stress coloring
 lb.plot(plot_stress=True, plot_section=False)  # Stress only, no section outline
+
+# Or use plot_beam_diagram directly (more options)
+from beamy.analysis.beam_plotter import plot_beam_diagram
+
+plot_beam_diagram(lb, plot_stress=True, plot_section=True)
+plot_beam_diagram(lb, plot_stress=True, save_path="beam_diagram.png")  # Save to file
+
+# Plot section stress at specific locations
+from beamy import SectionPlotter
+
+# Find location of maximum stress
+vm_results = lb.von_mises(points=200)
+max_vm_idx = np.argmax(vm_results._values)
+max_vm_x = vm_results._x[max_vm_idx]
+
+# Create section plotter and plot stress at critical location
+sp = SectionPlotter(lb)
+sp.plot_stress_at(
+    x_pos=max_vm_x,
+    stress_type="von_mises",
+    title=f"Max Von Mises Stress (x={max_vm_x:.2f})",
+    cmap="plasma"
+)
+
+# Plot different stress types at any location
+sp.plot_stress_at(x_pos=2.5, stress_type="sigma_bending", cmap="RdBu_r")
+sp.plot_stress_at(x_pos=2.5, stress_type="tau_shear", cmap="viridis")
 ```
+
+---
+
+## Visualization
+
+Beamy provides two main plotting capabilities:
+
+### 1. 3D Beam Diagram
+
+The `plot_beam_diagram` function (or `lb.plot()` convenience method) creates a 3D visualization showing:
+- Beam cross-section outline at x=0
+- Beam axis (optionally colored by von Mises stress)
+- Point forces as red arrows
+- Distributed forces as green arrows with connecting lines
+- Moments as blue arcs with cone tips
+- Supports as hollow circles with labels
+
+```python
+from beamy.analysis.beam_plotter import plot_beam_diagram
+
+# Basic plot
+plot_beam_diagram(lb, plot_stress=False, plot_section=True)
+
+# With stress coloring
+plot_beam_diagram(lb, plot_stress=True, plot_section=True)
+
+# Save to file instead of showing
+plot_beam_diagram(lb, plot_stress=True, save_path="output.png")
+```
+
+### 2. Section Stress Plots
+
+The `SectionPlotter` class plots detailed stress distributions on the cross-section at specific locations:
+
+```python
+from beamy import SectionPlotter
+
+sp = SectionPlotter(lb)
+
+# Plot von Mises stress at a specific location
+sp.plot_stress_at(x_pos=2.5, stress_type="von_mises")
+
+# Available stress types:
+# - "von_mises" (default)
+# - "sigma" (total normal stress)
+# - "sigma_axial" (axial stress)
+# - "sigma_bending" (bending stress)
+# - "tau" (total shear stress)
+# - "tau_shear" (transverse shear)
+# - "tau_torsion" (torsional shear)
+```
+
+For more details, see the [Beam Plotter](../reference/analysis/beam%20plotter.md) and [Section Plotter](../reference/analysis/section%20plotter.md) reference documentation.
 
