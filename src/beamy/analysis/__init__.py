@@ -7,7 +7,7 @@ from .analysis import (
     get_all_loads,
 )
 from .beam_plotter import plot_beam_diagram, plot_loads
-from .section_plotter import SectionPlotter
+from .stress_plotter import StressPlotter
 
 __all__ = [
     "Result",
@@ -18,5 +18,5 @@ __all__ = [
     "get_all_loads",
     "plot_beam_diagram",
     "plot_loads",
-    "SectionPlotter",
+    "StressPlotter",
 ]

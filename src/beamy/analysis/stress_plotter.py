@@ -5,7 +5,7 @@ import numpy as np
 from sectiony.stress import Stress, StressType
 from .analysis import LoadedBeam
 
-class SectionPlotter:
+class StressPlotter:
     """
     Plots stress distributions on the beam's cross-section at a specific location along the beam.
     """

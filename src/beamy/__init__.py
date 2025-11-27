@@ -7,6 +7,7 @@ from .setup import (
     DistributedForce,
     Moment,
     LoadCase,
+    plot_section,
 )
 from sectiony import Section, Geometry, Shape
 from .analysis import (
@@ -16,7 +17,7 @@ from .analysis import (
     solve_x_reactions,
     solve_transverse_reactions,
     get_all_loads,
-    SectionPlotter,
+    StressPlotter,
 )
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "DistributedForce",
     "Moment",
     "LoadCase",
+    "plot_section",
     "Section",
     "Geometry",
     "Shape",
@@ -37,5 +39,5 @@ __all__ = [
     "solve_x_reactions",
     "solve_transverse_reactions",
     "get_all_loads",
-    "SectionPlotter",
+    "StressPlotter",
 ]
