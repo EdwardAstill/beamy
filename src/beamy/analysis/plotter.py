@@ -135,11 +135,159 @@ def _plot_moments(ax, moments, beam_length):
         
         # Draw arc (on top)
         ax.plot(arc_points[:, 0], arc_points[:, 1], arc_points[:, 2],
-                color='blue', linewidth=2, zorder=10)
+                color='blue', linewidth=2, zorder=100)
 
 
-def _plot_distributed_forces(ax, dist_forces):
-    pass
+def _plot_distributed_forces(ax, dist_forces, beam_length):
+    """
+    Plots 3D arrows for distributed forces using lines and 3D cones.
+    Draws arrows at start and end, plus intermediate arrows based on load length ratio.
+    Connects all arrow tails with a line.
+    
+    Mapping:
+    Beam X -> Plot Y
+    Beam Y -> Plot Z
+    Beam Z -> Plot X
+    
+    Args:
+        ax: 3D axes object
+        dist_forces: List of DistributedForce objects
+        beam_length: Length of the beam (used for scaling arrow lengths)
+    """
+    if not dist_forces:
+        return
+    
+    # Calculate max force magnitude across all distributed forces for scaling
+    max_magnitude = 0.0
+    for df in dist_forces:
+        max_magnitude = max(max_magnitude, np.linalg.norm(df.start_force), np.linalg.norm(df.end_force))
+    
+    if max_magnitude == 0:
+        return
+    
+    # Longest arrow should be 1/5th the length of the beam
+    max_arrow_length = beam_length / 5.0
+    
+    for df in dist_forces:
+        # Calculate distributed load length
+        load_length = np.linalg.norm(df.end_position - df.start_position)
+        if load_length < 1e-10:
+            continue
+        
+        # Calculate average force magnitude from start and end for consistent cone size
+        start_force_mag = np.linalg.norm(df.start_force)
+        end_force_mag = np.linalg.norm(df.end_force)
+        avg_force_mag = (start_force_mag + end_force_mag) / 2.0
+        
+        if avg_force_mag < 1e-10:
+            continue
+        
+        # Calculate average arrow length based on average force magnitude
+        avg_arrow_length = (avg_force_mag / max_magnitude) * max_arrow_length
+        
+        # Fixed cone size for all arrows in this distributed load
+        cone_length = avg_arrow_length * 0.2
+        cone_radius = avg_arrow_length * 0.08
+        
+        # Determine number of arrows based on ratio of load length to beam length
+        # Base count of 10 arrows for full beam length, minimum 2 (start and end)
+        base_count = 10
+        num_arrows = max(2, int(np.ceil((load_length / beam_length) * base_count)))
+        
+        # Interpolate positions and forces
+        ts = np.linspace(0.0, 1.0, num_arrows)
+        positions = np.outer(1 - ts, df.start_position) + np.outer(ts, df.end_position)
+        forces = np.outer(1 - ts, df.start_force) + np.outer(ts, df.end_force)
+        
+        # Store tail positions for connecting line
+        tail_positions = []
+        
+        for i in range(num_arrows):
+            pos = positions[i]
+            force = forces[i]
+            
+            # Extract Beam coordinates
+            px, py, pz = pos
+            fx, fy, fz = force
+            
+            # Map to Plot coordinates
+            # Plot (X, Y, Z) = (Beam Z, Beam X, Beam Y)
+            tip = np.array([pz, px, py])
+            force_vec = np.array([fz, fx, fy])
+            
+            # Calculate arrow length proportional to force magnitude
+            force_magnitude = np.linalg.norm(force_vec)
+            if force_magnitude < 1e-10:
+                continue
+            
+            arrow_length = (force_magnitude / max_magnitude) * max_arrow_length
+            
+            # Normalize direction vector
+            direction = force_vec / force_magnitude
+            
+            # Tail is at tip - direction * arrow_length
+            tail = tip - direction * arrow_length
+            tail_positions.append(tail)
+            
+            # Create and draw the cone (arrow head) with fixed size
+            side_faces, base_face = _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=12)
+            
+            # Side faces in green
+            side_collection = Poly3DCollection(side_faces, facecolor='green', edgecolor='green', alpha=1.0)
+            ax.add_collection3d(side_collection)
+            
+            # Base face in lighter green
+            base_collection = Poly3DCollection(base_face, facecolor='#44dd44', edgecolor='#44dd44', alpha=1.0)
+            ax.add_collection3d(base_collection)
+            
+            # Draw the arrow shaft
+            cone_base = tip - direction * cone_length
+            ax.plot([tail[0], cone_base[0]], 
+                    [tail[1], cone_base[1]], 
+                    [tail[2], cone_base[2]], 
+                    color='green', linewidth=2, zorder=100)
+        
+        # Connect all arrow tails with a line
+        if len(tail_positions) >= 2:
+            tail_positions = np.array(tail_positions)
+            ax.plot(tail_positions[:, 0], tail_positions[:, 1], tail_positions[:, 2],
+                    color='green', linewidth=2, zorder=100)
+
+
+def _plot_supports(ax, supports, beam_length):
+    """
+    Plots supports as small spheres with their 6-digit code labels.
+    
+    Args:
+        ax: 3D axes object
+        supports: List of Support objects
+        beam_length: Length of the beam (used for scaling sphere size)
+    """
+    if not supports:
+        return
+    
+    # Sphere radius scales with beam length
+    sphere_radius = beam_length / 100.0
+    
+    for support in supports:
+        # Support position along beam axis
+        # Plot coords: (Beam Z, Beam X, Beam Y) = (0, support.x, 0)
+        center = np.array([0, support.x, 0])
+        
+        # Create sphere mesh
+        u = np.linspace(0, 2 * np.pi, 20)
+        v = np.linspace(0, np.pi, 10)
+        x = center[0] + sphere_radius * np.outer(np.cos(u), np.sin(v))
+        y = center[1] + sphere_radius * np.outer(np.sin(u), np.sin(v))
+        z = center[2] + sphere_radius * np.outer(np.ones(np.size(u)), np.cos(v))
+        
+        # Plot sphere surface
+        ax.plot_surface(x, y, z, color='black', alpha=0.8, linewidth=0)
+        
+        # Add label with 6-digit code, offset slightly above the sphere
+        label_offset = sphere_radius * 1.5
+        ax.text(center[0], center[1], center[2] + label_offset, 
+                support.type, fontsize=8, ha='center', va='bottom', color='black')
 
 def _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=8):
     """
@@ -245,21 +393,21 @@ def _plot_point_forces(ax, point_forces, beam_length):
         cone_radius = arrow_length * 0.08  # Cone radius is 8% of arrow length
         side_faces, base_face = _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=12)
         
-        # Side faces in red, no edges
+        cone_base = tip - direction * cone_length
+        
+        # Side faces in red
         side_collection = Poly3DCollection(side_faces, facecolor='red', edgecolor='red', alpha=1.0)
         ax.add_collection3d(side_collection)
         
-        # Base face in slightly lighter red
-        base_collection = Poly3DCollection(base_face, facecolor='#dd4444', edgecolor='#dd4444', alpha=1.0)
+        # Base face
+        base_collection = Poly3DCollection(base_face, facecolor='#ff4444', edgecolor='#ff4444', alpha=1.0)
         ax.add_collection3d(base_collection)
         
-        # Draw the arrow shaft (line) AFTER cone so it appears on top
-        # Line ends at cone base, not tip
-        cone_base = tip - direction * cone_length
+        # Draw the arrow shaft line last so it appears on top
         ax.plot([tail[0], cone_base[0]], 
                 [tail[1], cone_base[1]], 
                 [tail[2], cone_base[2]], 
-                color='red', linewidth=2, zorder=10)
+                color='red', linewidth=2, zorder=100)
 
 def plot_loads(ax, load_case, beam_length: float):
     if not load_case:
@@ -267,7 +415,7 @@ def plot_loads(ax, load_case, beam_length: float):
     
     _plot_point_forces(ax, load_case.point_forces, beam_length)
     _plot_moments(ax, load_case.moments, beam_length)
-    _plot_distributed_forces(ax, load_case.dist_forces)
+    _plot_distributed_forces(ax, load_case.dist_forces, beam_length)
 
 
 def _plot_stress_line(ax, loaded_beam: "LoadedBeam", length: float, n_points: int = 100):
@@ -358,7 +506,7 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
             plot_y = np.zeros_like(offset_z)
             plot_z = offset_y
             
-            ax.plot(plot_x, plot_y, plot_z, color='black', linewidth=1.5)
+            ax.plot(plot_x, plot_y, plot_z, color='grey', linewidth=1.5)
 
     # Draw beam axis line from (0,0,0) to (L,0,0) in beam coords
     # Plot coords: (0, 0, 0) to (0, L, 0)
@@ -393,8 +541,25 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     # Set equal aspect ratio so cones appear as proper cones
     ax.set_box_aspect([2 * yz_range, length, 2 * yz_range])
 
-    # Hide all axes
-    ax.set_axis_off()
+    # Hide all panes and grid
+    ax.grid(False)
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+    
+    # Hide Plot X axis completely (Beam Z)
+    ax.xaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+    ax.set_xticks([])
+    
+    # Plot Y axis = Beam X (along beam) - label as "x", show ticks, position further from axis
+    ax.set_ylabel('x', labelpad=20)
+    
+    # Plot Z axis = Beam Y (vertical) - label as "y", hide ticks, position closer to axis
+    ax.set_zlabel('y', labelpad=-10)
+    ax.set_zticks([])
+    
+    # Plot Supports last so they overlap everything
+    _plot_supports(ax, beam.supports, length)
     
     # Set white background
     fig.patch.set_facecolor('white')
