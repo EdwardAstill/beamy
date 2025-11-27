@@ -256,38 +256,30 @@ def _plot_distributed_forces(ax, dist_forces, beam_length):
 
 def _plot_supports(ax, supports, beam_length):
     """
-    Plots supports as small spheres with their 6-digit code labels.
+    Plots supports as small circles (disks) with their 6-digit code labels.
     
     Args:
         ax: 3D axes object
         supports: List of Support objects
-        beam_length: Length of the beam (used for scaling sphere size)
+        beam_length: Length of the beam (used for scaling size)
     """
     if not supports:
         return
     
-    # Sphere radius scales with beam length
-    sphere_radius = beam_length / 100.0
+    # Label offset scales with beam length
+    label_offset = beam_length / 60.0
     
     for support in supports:
         # Support position along beam axis
         # Plot coords: (Beam Z, Beam X, Beam Y) = (0, support.x, 0)
-        center = np.array([0, support.x, 0])
         
-        # Create sphere mesh
-        u = np.linspace(0, 2 * np.pi, 20)
-        v = np.linspace(0, np.pi, 10)
-        x = center[0] + sphere_radius * np.outer(np.cos(u), np.sin(v))
-        y = center[1] + sphere_radius * np.outer(np.sin(u), np.sin(v))
-        z = center[2] + sphere_radius * np.outer(np.ones(np.size(u)), np.cos(v))
+        # Plot support as a simple marker 'o' (hollow)
+        # zorder=300 to be above everything else (arrows are 100, labels 200)
+        ax.scatter([0], [support.x], [0], marker='o', edgecolors='black', facecolors='white', s=50, depthshade=False, zorder=300)
         
-        # Plot sphere surface
-        ax.plot_surface(x, y, z, color='black', alpha=0.8, linewidth=0)
-        
-        # Add label with 6-digit code, offset slightly above the sphere
-        label_offset = sphere_radius * 1.5
-        ax.text(center[0], center[1], center[2] + label_offset, 
-                support.type, fontsize=8, ha='center', va='bottom', color='black')
+        # Add label with 6-digit code, offset slightly above the marker
+        ax.text(0, support.x, label_offset, 
+                support.type, fontsize=8, ha='center', va='bottom', color='black', zorder=200)
 
 def _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=8):
     """
@@ -452,7 +444,7 @@ def _plot_stress_line(ax, loaded_beam: "LoadedBeam", length: float, n_points: in
     # Add colorbar
     sm = cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    plt.colorbar(sm, ax=ax, label='Max Von Mises Stress', shrink=0.6, pad=0.1)
+    plt.colorbar(sm, ax=ax, label='Max Von Mises Stress', shrink=0.6, pad=-0.05, )
 
 def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot_section: bool = True):
     """
@@ -507,6 +499,11 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
             plot_z = offset_y
             
             ax.plot(plot_x, plot_y, plot_z, color='grey', linewidth=1.5)
+            
+            # Fill the section face
+            verts = [list(zip(plot_x, plot_y, plot_z))]
+            poly = Poly3DCollection(verts, facecolor='grey', alpha=0)
+            ax.add_collection3d(poly)
 
     # Draw beam axis line from (0,0,0) to (L,0,0) in beam coords
     # Plot coords: (0, 0, 0) to (0, L, 0)
@@ -567,8 +564,4 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     
     ax.view_init(elev=20, azim=-60)
     
-    title = f"Beam Diagram (L={length})"
-    if plot_stress:
-        title = f"Von Mises Stress (L={length})"
-    plt.title(title)
     plt.show()
