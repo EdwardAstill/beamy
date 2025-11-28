@@ -164,15 +164,15 @@ plot_beam_diagram(lb, plot_stress=True, plot_section=True)
 plot_beam_diagram(lb, plot_stress=True, save_path="beam_diagram.png")  # Save to file
 
 # Plot section stress at specific locations
-from beamy import SectionPlotter
+from beamy import StressPlotter
 
 # Find location of maximum stress
 vm_results = lb.von_mises(points=200)
 max_vm_idx = np.argmax(vm_results._values)
 max_vm_x = vm_results._x[max_vm_idx]
 
-# Create section plotter and plot stress at critical location
-sp = SectionPlotter(lb)
+# Create stress plotter and plot stress at critical location
+sp = StressPlotter(lb)
 sp.plot_stress_at(
     x_pos=max_vm_x,
     stress_type="von_mises",
@@ -216,12 +216,12 @@ plot_beam_diagram(lb, plot_stress=True, save_path="output.png")
 
 ### 2. Section Stress Plots
 
-The `SectionPlotter` class plots detailed stress distributions on the cross-section at specific locations:
+The `StressPlotter` class plots detailed stress distributions on the cross-section at specific locations:
 
 ```python
-from beamy import SectionPlotter
+from beamy import StressPlotter
 
-sp = SectionPlotter(lb)
+sp = StressPlotter(lb)
 
 # Plot von Mises stress at a specific location
 sp.plot_stress_at(x_pos=2.5, stress_type="von_mises")

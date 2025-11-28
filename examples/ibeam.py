@@ -50,7 +50,7 @@ max_vm_val = vm_results._values[max_vm_idx]
 print(f"Max Von Mises Stress: {max_vm_val/1e6:.2f} MPa at x = {max_vm_x:.2f} mm")
 
 # Plot the beam with forces and stress coloring
-from beamy import SectionPlotter
+from beamy import StressPlotter
 from pathlib import Path
 
 # Create gallery directory if it doesn't exist
@@ -66,7 +66,7 @@ plot_beam_diagram(
 )
 
 # Plot section stress at the critical location
-sp = SectionPlotter(lb)
+sp = StressPlotter(lb)
 sp.plot_stress_at(
     x_pos=max_vm_x, 
     stress_type="von_mises", 

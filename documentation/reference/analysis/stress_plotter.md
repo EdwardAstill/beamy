@@ -1,30 +1,30 @@
-# Section Plotter
+# Stress Plotter
 
 Reference documentation for plotting stress distributions on beam cross-sections at specific locations along the beam.
 
 ## Table of Contents
 
-- [SectionPlotter](#sectionplotter)
+- [StressPlotter](#stressplotter)
   - [plot_stress_at](#plot_stress_at)
 
 ---
 
-## SectionPlotter
+## StressPlotter
 
 A class that plots stress distributions on the beam's cross-section at specific locations along the beam length. It integrates with `sectiony` to provide detailed stress visualization.
 
 ```python
-from beamy import SectionPlotter
+from beamy import StressPlotter
 # Or:
-from beamy.analysis.section_plotter import SectionPlotter
+from beamy.analysis.stress_plotter import StressPlotter
 
-class SectionPlotter:
+class StressPlotter:
     """
     Plots stress distributions on the beam's cross-section at a specific location along the beam.
     """
     def __init__(self, loaded_beam: LoadedBeam):
         """
-        Initialize the section plotter.
+        Initialize the stress plotter.
         
         Args:
             loaded_beam: LoadedBeam object containing beam, loads, and analysis results
@@ -34,13 +34,13 @@ class SectionPlotter:
 ### Initialization
 
 ```python
-from beamy import LoadedBeam, SectionPlotter
+from beamy import LoadedBeam, StressPlotter
 
 # After creating a LoadedBeam
 lb = LoadedBeam(beam, load_case)
 
-# Create a SectionPlotter
-sp = SectionPlotter(lb)
+# Create a StressPlotter
+sp = StressPlotter(lb)
 ```
 
 ---
@@ -110,7 +110,7 @@ def plot_stress_at(
 ### Example
 
 ```python
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, SectionPlotter
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, StressPlotter
 from sectiony.library import i_section
 import numpy as np
 
@@ -144,8 +144,8 @@ max_vm_x = vm_results._x[max_vm_idx]
 
 print(f"Max Von Mises Stress at x = {max_vm_x:.2f}")
 
-# Create section plotter
-sp = SectionPlotter(lb)
+# Create stress plotter
+sp = StressPlotter(lb)
 
 # Plot von Mises stress at the critical location
 sp.plot_stress_at(
@@ -191,5 +191,4 @@ plt.show()
 
 ## Units
 
-**Beamy is unit-agnostic.** The section plotter uses the same units as your input data. The stress values will be in force/length² units (e.g., Pa if using N and m, or MPa if using kN and mm). See the [Beam documentation](../beam.md#units) for details on unit consistency requirements.
-
+**Beamy is unit-agnostic.** The stress plotter uses the same units as your input data. The stress values will be in force/length² units (e.g., Pa if using N and m, or MPa if using kN and mm). See the [Beam documentation](../beam.md#units) for details on unit consistency requirements.

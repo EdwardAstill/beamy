@@ -11,7 +11,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 from sectiony.library import i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, SectionPlotter
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, StressPlotter
 from beamy.analysis.beam_plotter import plot_beam_diagram
 
 # Create gallery directory
@@ -67,7 +67,7 @@ plot_beam_diagram(
 )
 
 # 7. Plot Section Stresses
-sp = SectionPlotter(lb)
+sp = StressPlotter(lb)
 
 # Plot at maximum stress location
 sp.plot_stress_at(
