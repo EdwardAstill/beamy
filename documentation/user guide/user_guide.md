@@ -161,7 +161,7 @@ lb.plot(plot_stress=True, plot_section=False)  # Stress only, no section outline
 from beamy.analysis.beam_plotter import plot_beam_diagram
 
 plot_beam_diagram(lb, plot_stress=True, plot_section=True)
-plot_beam_diagram(lb, plot_stress=True, save_path="beam_diagram.png")  # Save to file
+plot_beam_diagram(lb, plot_stress=True, save_path="beam_diagram.svg")  # Save to file
 
 # Plot section stress at specific locations
 from beamy import StressPlotter
@@ -211,7 +211,7 @@ plot_beam_diagram(lb, plot_stress=False, plot_section=True)
 plot_beam_diagram(lb, plot_stress=True, plot_section=True)
 
 # Save to file instead of showing
-plot_beam_diagram(lb, plot_stress=True, save_path="output.png")
+plot_beam_diagram(lb, plot_stress=True, save_path="output.svg")
 ```
 
 ### 2. Section Stress Plots

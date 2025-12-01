@@ -51,8 +51,8 @@ plot_beam_diagram(
     lb,
     plot_stress=False,
     plot_section=True,
-    save_path=str(gallery_dir / "simple_beam.png")
+    save_path=str(gallery_dir / "simple_beam.svg")
 )
 
-print(f"\nPlot saved to: {gallery_dir / 'simple_beam.png'}")
+print(f"\nPlot saved to: {gallery_dir / 'simple_beam.svg'}")
 

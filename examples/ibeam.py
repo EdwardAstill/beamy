@@ -62,7 +62,7 @@ plot_beam_diagram(
     lb, 
     plot_stress=True, 
     plot_section=True,
-    save_path=str(gallery_dir / "ibeam_3d_diagram.png")
+    save_path=str(gallery_dir / "ibeam_3d_diagram.svg")
 )
 
 # Plot section stress at the critical location
@@ -75,5 +75,5 @@ sp.plot_stress_at(
     show=False
 )
 import matplotlib.pyplot as plt
-plt.savefig(gallery_dir / "ibeam_section_stress.png", bbox_inches='tight', dpi=300)
+plt.savefig(gallery_dir / "ibeam_section_stress.svg", bbox_inches='tight', dpi=300)
 plt.close()

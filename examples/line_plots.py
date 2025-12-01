@@ -70,8 +70,8 @@ gallery_dir.mkdir(exist_ok=True)
 print("Generating analysis plots...")
 plot_analysis_results(
     lb, 
-    save_path=str(gallery_dir / "line_plots_example.png"),
+    save_path=str(gallery_dir / "line_plots_example.svg"),
     show=False  # Set to True to display interactively
 )
-print(f"Plots saved to {gallery_dir / 'line_plots_example.png'}")
+print(f"Plots saved to {gallery_dir / 'line_plots_example.svg'}")
 

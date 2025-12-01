@@ -51,8 +51,8 @@ plot_beam_diagram(
     lb,
     plot_stress=True,
     plot_section=True,
-    save_path=str(gallery_dir / "cantilever.png")
+    save_path=str(gallery_dir / "cantilever.svg")
 )
 
-print(f"\nPlot saved to: {gallery_dir / 'cantilever.png'}")
+print(f"\nPlot saved to: {gallery_dir / 'cantilever.svg'}")
 

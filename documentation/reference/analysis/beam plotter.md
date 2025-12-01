@@ -114,7 +114,7 @@ loaded_beam = LoadedBeam(beam, lc)
 plot_beam_diagram(loaded_beam, plot_stress=True, plot_section=True)
 
 # Save to file instead of showing
-plot_beam_diagram(loaded_beam, plot_stress=True, plot_section=True, save_path="beam_diagram.png")
+plot_beam_diagram(loaded_beam, plot_stress=True, plot_section=True, save_path="beam_diagram.svg")
 ```
 
 ### Notes

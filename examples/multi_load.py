@@ -73,8 +73,8 @@ plot_beam_diagram(
     lb,
     plot_stress=True,
     plot_section=True,
-    save_path=str(gallery_dir / "multi_load.png")
+    save_path=str(gallery_dir / "multi_load.svg")
 )
 
-print(f"\nPlot saved to: {gallery_dir / 'multi_load.png'}")
+print(f"\nPlot saved to: {gallery_dir / 'multi_load.svg'}")
 

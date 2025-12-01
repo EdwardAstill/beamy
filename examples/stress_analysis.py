@@ -63,7 +63,7 @@ plot_beam_diagram(
     lb,
     plot_stress=True,
     plot_section=True,
-    save_path=str(gallery_dir / "stress_analysis_3d.png")
+    save_path=str(gallery_dir / "stress_analysis_3d.svg")
 )
 
 # 7. Plot Section Stresses
@@ -77,7 +77,7 @@ sp.plot_stress_at(
     cmap="plasma",
     show=False
 )
-plt.savefig(gallery_dir / "stress_analysis_von_mises.png", bbox_inches='tight', dpi=300)
+plt.savefig(gallery_dir / "stress_analysis_von_mises.svg", bbox_inches='tight', dpi=300)
 plt.close()
 
 # Plot bending stress at mid-span
@@ -88,7 +88,7 @@ sp.plot_stress_at(
     cmap="RdBu_r",
     show=False
 )
-plt.savefig(gallery_dir / "stress_analysis_bending.png", bbox_inches='tight', dpi=300)
+plt.savefig(gallery_dir / "stress_analysis_bending.svg", bbox_inches='tight', dpi=300)
 plt.close()
 
 # Plot multiple stress types at same location
@@ -123,12 +123,12 @@ axes[2].set_title("Von Mises Stress")
 
 plt.suptitle(f"Stress Components at x={max_vm_x:.3f}m", fontsize=14)
 plt.tight_layout()
-plt.savefig(gallery_dir / "stress_analysis_components.png", bbox_inches='tight', dpi=300)
+plt.savefig(gallery_dir / "stress_analysis_components.svg", bbox_inches='tight', dpi=300)
 plt.close()
 
 print(f"\nPlots saved to gallery directory:")
-print(f"  - stress_analysis_3d.png")
-print(f"  - stress_analysis_von_mises.png")
-print(f"  - stress_analysis_bending.png")
-print(f"  - stress_analysis_components.png")
+print(f"  - stress_analysis_3d.svg")
+print(f"  - stress_analysis_von_mises.svg")
+print(f"  - stress_analysis_bending.svg")
+print(f"  - stress_analysis_components.svg")
 

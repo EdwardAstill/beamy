@@ -47,7 +47,7 @@ plot_beam_diagram(
     lb_ibeam,
     plot_stress=True,
     plot_section=True,
-    save_path=str(gallery_dir / "section_ibeam.png")
+    save_path=str(gallery_dir / "section_ibeam.svg")
 )
 
 # 2. Rectangular Hollow Section
@@ -63,10 +63,10 @@ plot_beam_diagram(
     lb_rect,
     plot_stress=True,
     plot_section=True,
-    save_path=str(gallery_dir / "section_rhs.png")
+    save_path=str(gallery_dir / "section_rhs.svg")
 )
 
 print(f"\nPlots saved to gallery directory:")
-print(f"  - section_ibeam.png")
-print(f"  - section_rhs.png")
+print(f"  - section_ibeam.svg")
+print(f"  - section_rhs.svg")
 
