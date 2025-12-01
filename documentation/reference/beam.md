@@ -9,6 +9,9 @@ Reference documentation for beam geometry, materials, sections, and supports.
 - [Support](#support)
 - [Beam1D](#beam1d)
 - [validate_support_type](#validate_support_type)
+- [validate_support_pairs](#validate_support_pairs)
+- [plot_section](#plot_section)
+- [plot_supports](#plot_supports)
 
 ---
 
@@ -257,6 +260,113 @@ validate_support_type("111111")  # Returns "111111"
 
 ---
 
+## validate_support_pairs
+
+Validate that a list of supports provides sufficient constraints for a stable beam.
+
+```python
+from beamy import validate_support_pairs
+
+def validate_support_pairs(supports: List[Support]) -> None:
+    """
+    Validate that the supports provide stability in all 6 DOFs.
+    
+    Args:
+        supports: List of Support objects
+        
+    Raises:
+        ValueError: If the beam is unstable (missing constraint in some direction)
+    """
+```
+
+### Parameters
+
+- `supports` (List[Support]): List of support objects to validate.
+
+### Behavior
+
+Checks that the set of supports provides at least one constraint in each of the following:
+- Translation in X, Y, Z
+- Rotation about X
+
+Note: This is a basic stability check and does not guarantee full kinematic stability for all configurations (e.g. mechanisms), but catches common missing constraints.
+
+### Example
+
+```python
+supports = [Support(x=0, type="000000")]
+# validate_support_pairs(supports) # Raises ValueError: Beam must be supported in x direction...
+```
+
+---
+
+## plot_section
+
+Plot the cross-section geometry.
+
+```python
+from beamy import plot_section
+
+def plot_section(
+    section: Section, 
+    ax: Optional[plt.Axes] = None, 
+    show: bool = True
+) -> Optional[plt.Axes]:
+    """
+    Plot the cross-section geometry.
+    Wrapper around sectiony.plotter.plot_section.
+    """
+```
+
+### Parameters
+
+- `section` (Section): The section to plot.
+- `ax` (matplotlib.axes.Axes, optional): Axes to plot on.
+- `show` (bool): Whether to call `plt.show()`.
+
+### Example
+
+```python
+plot_section(my_section)
+```
+
+---
+
+## plot_supports
+
+Plots the beam supports in 2D.
+
+```python
+from beamy import plot_supports
+
+def plot_supports(
+    supports: List[Support], 
+    beam_length: float, 
+    unit: str = "m", 
+    save_path: Optional[str] = None, 
+    show: bool = True
+) -> None:
+    """
+    Plots the beam as a straight line with supports marked as dots and labeled.
+    """
+```
+
+### Parameters
+
+- `supports` (List[Support]): List of supports.
+- `beam_length` (float): Length of beam.
+- `unit` (str): Unit label for position (default "m").
+- `save_path` (str, optional): Path to save image.
+- `show` (bool): Whether to show the plot.
+
+### Example
+
+```python
+plot_supports(beam.supports, beam.L)
+```
+
+---
+
 ## Units
 
 **Beamy is unit-agnostic.** You can use any consistent system of units (SI, US customary, etc.), as long as all quantities use the same base units throughout your analysis.
@@ -287,4 +397,3 @@ All quantities must use consistent units:
 - Moment: lbf·in, lbf·ft, or kip·in, kip·ft
 
 **Important:** All inputs for a single analysis must use the same unit system. Mixing units will produce incorrect results.
-

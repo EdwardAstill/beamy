@@ -10,6 +10,7 @@ Reference documentation for beam analysis functions and result classes.
 - [solve_x_reactions](#solve_x_reactions)
 - [solve_transverse_reactions](#solve_transverse_reactions)
 - [get_all_loads](#get_all_loads)
+- [plot_analysis_results](#plot_analysis_results)
 
 ---
 
@@ -302,33 +303,33 @@ Solve for axial and torsional reactions using 1D finite element method.
 from beamy import solve_x_reactions
 
 def solve_x_reactions(
-    supports: List[Support],
+    beam: Beam1D,
     loads: LoadCase
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Solve for axial (Fx) and torsional (Mx) reactions.
     
     Args:
-        supports: List of Support objects (must be sorted by x)
+        beam: Beam1D object
         loads: LoadCase containing applied loads
         
     Returns:
-        Tuple of (d_x, d_rx) where:
-        - d_x: Axial displacements at support nodes
-        - d_rx: Torsional rotations at support nodes
+        Tuple of (d_x, d_rx, x_nodes_axial, x_nodes_torsion)
     """
 ```
 
 ### Parameters
 
-- `supports` (List[Support]): List of support conditions (should be sorted by x-position)
+- `beam` (Beam1D): Beam object with supports
 - `loads` (LoadCase): Load case containing applied loads
 
 ### Returns
 
-- `Tuple[np.ndarray, np.ndarray]`: 
-  - First array: Axial displacements (Ux) at each support node
-  - Second array: Torsional rotations (Rx) at each support node
+- `Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]`: 
+  - `d_x`: Global axial displacements
+  - `d_rx`: Global torsional displacements
+  - `x_nodes_axial`: Node positions for axial FEM
+  - `x_nodes_torsion`: Node positions for torsion FEM
 
 ### Behavior
 
@@ -341,14 +342,11 @@ def solve_x_reactions(
 ```python
 from beamy import solve_x_reactions
 
-# Supports should be sorted by x
-supports_sorted = sorted(beam.supports, key=lambda s: s.x)
-
 # Solve for reactions
-d_x, d_rx = solve_x_reactions(supports_sorted, load_case)
+d_x, d_rx, x_nodes_a, x_nodes_t = solve_x_reactions(beam, load_case)
 
 # Reactions are automatically stored in support.reactions
-for support in supports_sorted:
+for support in beam.supports:
     print(f"At x={support.x}: Fx={support.reactions['Fx']}, Mx={support.reactions['Mx']}")
 ```
 
@@ -365,7 +363,7 @@ def solve_transverse_reactions(
     beam: Beam1D,
     loads: LoadCase,
     axis: str = "z"
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Solve for transverse reactions (shear and bending moment).
     
@@ -375,7 +373,7 @@ def solve_transverse_reactions(
         axis: Bending axis, either "y" or "z" (default: "z")
         
     Returns:
-        Displacement vector [w1, theta1, w2, theta2, ...] for the specified axis
+        Tuple of (d, x_nodes)
     """
 ```
 
@@ -389,10 +387,9 @@ def solve_transverse_reactions(
 
 ### Returns
 
-- `np.ndarray`: Displacement vector containing [w1, θ1, w2, θ2, ...] where:
-  - `w`: Transverse displacement
-  - `θ`: Rotation angle
-  - Subscripts indicate support node indices
+- `Tuple[np.ndarray, np.ndarray]`:
+  - `d`: Global displacement vector containing [w1, θ1, w2, θ2, ...]
+  - `x_nodes`: Array of node x-positions used in the FEM solution
 
 ### Behavior
 
@@ -407,14 +404,14 @@ def solve_transverse_reactions(
 from beamy import solve_transverse_reactions
 
 # Solve for reactions in z-direction (vertical)
-d_z = solve_transverse_reactions(beam, load_case, axis="z")
+d_z, x_nodes = solve_transverse_reactions(beam, load_case, axis="z")
 
 # Reactions are automatically stored
 for support in beam.supports:
     print(f"At x={support.x}: Fz={support.reactions['Fz']}, My={support.reactions['My']}")
 
 # Solve for reactions in y-direction (horizontal)
-d_y = solve_transverse_reactions(beam, load_case, axis="y")
+d_y, x_nodes = solve_transverse_reactions(beam, load_case, axis="y")
 ```
 
 ---
@@ -487,6 +484,39 @@ vertical_forces = [(x, t, v) for x, t, v in all_loads if t in ("Fz", "Rz")]
 
 ---
 
+## plot_analysis_results
+
+Plots the analysis results (Shear, Moment, Deflection, Axial/Torsion) on 2D line graphs.
+
+```python
+from beamy import plot_analysis_results
+
+def plot_analysis_results(
+    loaded_beam: LoadedBeam, 
+    save_path: Optional[str] = None, 
+    show: bool = True, 
+    points: int = 100
+) -> None:
+    """
+    Plots the analysis results (Shear, Moment, Deflection, Axial/Torsion) on 2D line graphs.
+    """
+```
+
+### Parameters
+
+- `loaded_beam` (LoadedBeam): The analyzed LoadedBeam object.
+- `save_path` (str, optional): Path to save the figure.
+- `show` (bool): Whether to display the plot.
+- `points` (int): Number of points to sample.
+
+### Example
+
+```python
+plot_analysis_results(loaded_beam)
+```
+
+---
+
 ## Analysis Workflow
 
 Typical workflow for analyzing a beam:
@@ -533,4 +563,3 @@ Typical workflow for analyzing a beam:
 - **Stress results**: Force / Length² (consistent with your input units)
 - **Displacement results**: Length units (same as input length)
 - **Rotation results**: Radians (dimensionless)
-

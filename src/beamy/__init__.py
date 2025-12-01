@@ -3,11 +3,13 @@ from .setup import (
     Material,
     Support,
     validate_support_type,
+    validate_support_pairs,
     PointForce,
     DistributedForce,
     Moment,
     LoadCase,
     plot_section,
+    plot_supports,
     plot_beam_diagram,
     plot_loads,
 )
@@ -20,6 +22,7 @@ from .analysis import (
     solve_transverse_reactions,
     get_all_loads,
     StressPlotter,
+    plot_analysis_results,
 )
 
 __all__ = [
@@ -27,11 +30,13 @@ __all__ = [
     "Material",
     "Support",
     "validate_support_type",
+    "validate_support_pairs",
     "PointForce",
     "DistributedForce",
     "Moment",
     "LoadCase",
     "plot_section",
+    "plot_supports",
     "plot_beam_diagram",
     "plot_loads",
     "Section",
@@ -44,4 +49,5 @@ __all__ = [
     "solve_transverse_reactions",
     "get_all_loads",
     "StressPlotter",
+    "plot_analysis_results",
 ]
