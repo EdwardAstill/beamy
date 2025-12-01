@@ -8,6 +8,8 @@ from .setup import (
     Moment,
     LoadCase,
     plot_section,
+    plot_beam_diagram,
+    plot_loads,
 )
 from sectiony import Section, Geometry, Shape
 from .analysis import (
@@ -30,6 +32,8 @@ __all__ = [
     "Moment",
     "LoadCase",
     "plot_section",
+    "plot_beam_diagram",
+    "plot_loads",
     "Section",
     "Geometry",
     "Shape",

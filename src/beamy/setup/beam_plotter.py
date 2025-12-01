@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 import numpy as np
 
 if TYPE_CHECKING:
-    from .analysis import LoadedBeam
+    from beamy.analysis import LoadedBeam
 
 
 def _create_moment_arc(center, moment_vec_beam, radius, arc_angle=3*np.pi/2, num_points=30):
@@ -444,7 +444,7 @@ def _plot_stress_line(ax, loaded_beam: "LoadedBeam", length: float, n_points: in
     # Add colorbar
     sm = cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    plt.colorbar(sm, ax=ax, label='Max Von Mises Stress', shrink=0.6, pad=-0.05, )
+    plt.colorbar(sm, ax=ax, label='Max Von Mises Stress', shrink=0.6, pad=-0.05)
 
 def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot_section: bool = True, save_path: Optional[str] = None):
     """
@@ -468,7 +468,7 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
 
     length = beam.L
     
-    fig = plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(12, 8))
     ax = fig.add_subplot(111, projection='3d')
 
     # Get shear center offsets (to position section with shear center at origin)
@@ -503,7 +503,7 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
             
             # Fill the section face
             verts = [list(zip(plot_x, plot_y, plot_z))]
-            poly = Poly3DCollection(verts, facecolor='grey', alpha=0)
+            poly = Poly3DCollection(verts, facecolor='grey', alpha=0.3)
             ax.add_collection3d(poly)
 
     # Draw beam axis line from (0,0,0) to (L,0,0) in beam coords
@@ -565,8 +565,11 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     
     ax.view_init(elev=20, azim=-60)
     
+    plt.tight_layout()
+    # Adjust subplots to remove whitespace on the left
     if save_path:
-        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.savefig(save_path, bbox_inches='tight', dpi=300, pad_inches=0)
         plt.close(fig)
     else:
         plt.show()
+

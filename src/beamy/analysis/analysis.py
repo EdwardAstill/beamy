@@ -7,9 +7,7 @@ import numpy as np
 
 from ..setup import Beam1D, Support
 from ..setup import LoadCase
-
-
-# -------------------------------------------------
+from ..setup import plot_beam_diagram
 # Generic 1D FEM Solver
 # -------------------------------------------------
 def _solve_fem_1d(
@@ -713,7 +711,6 @@ def _linear_interpolation(
 # -------------------------------------------------
 # Loaded beam wrapper
 # -------------------------------------------------
-from .beam_plotter import plot_beam_diagram
 
 @dataclass
 class LoadedBeam:

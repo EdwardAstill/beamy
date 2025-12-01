@@ -8,8 +8,7 @@ Demonstrates basic beam setup, loading, and visualization.
 import numpy as np
 from pathlib import Path
 from sectiony.library import i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam
-from beamy.analysis.beam_plotter import plot_beam_diagram
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, plot_beam_diagram
 
 # Create gallery directory
 gallery_dir = Path("gallery")

@@ -1,7 +1,6 @@
 import numpy as np
-from sectiony.library import i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam, DistributedForce
-from beamy.analysis.beam_plotter import plot_beam_diagram
+from sectiony.library import i as i_section
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam, DistributedForce, plot_beam_diagram
 
 # Create an I-beam section
 # d=200mm depth, b=100mm width, tf=10mm flange, tw=6mm web, r=8mm fillet
