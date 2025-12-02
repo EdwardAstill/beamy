@@ -224,16 +224,16 @@ from beamy import validate_support_type
 
 def validate_support_type(support: str) -> str:
     """
-    Validate node string format.
+    Validate support string format.
     
     Args:
         support: 6-digit string of 0s and 1s
         
     Returns:
-        Validated node string
+        Validated support string
         
     Raises:
-        ValueError: If node string is invalid
+        ValueError: If support string is invalid
     """
 ```
 

@@ -7,9 +7,9 @@ from sectiony import Section, Geometry, Shape
 
 def validate_support_type(support: str) -> str:
     """
-    Validate node string format.
+    Validate support string format.
     
-    node string is 6 digits representing constraints:
+    support string is 6 digits representing constraints:
     Position 1: Ux (translation in x) - 0=free, 1=constrained
     Position 2: Uy (translation in y) - 0=free, 1=constrained
     Position 3: Uz (translation in z) - 0=free, 1=constrained
@@ -26,17 +26,17 @@ def validate_support_type(support: str) -> str:
         support: 6-digit string of 0s and 1s
         
     Returns:
-        Validated node string
+        Validated support string
         
     Raises:
-        ValueError: If node string is invalid
+        ValueError: If support string is invalid
     """
     if not isinstance(support, str):
         raise ValueError(f"Support must be a string, got {type(support)}")
     if len(support) != 6:
-        raise ValueError(f"node string must be exactly 6 digits, got '{support}' (length {len(support)})")
+        raise ValueError(f"support string must be exactly 6 digits, got '{support}' (length {len(support)})")
     if not all(c in '01' for c in support):
-        raise ValueError(f"node string must contain only 0s and 1s, got '{support}'")
+        raise ValueError(f"support string must contain only 0s and 1s, got '{support}'")
     return support
 
 def validate_support_pairs(supports: List[Support]):

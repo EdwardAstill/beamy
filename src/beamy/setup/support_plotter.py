@@ -48,7 +48,7 @@ def plot_supports(supports: List["Support"], beam_length: float, unit: str = "m"
     
     # Hide everything else
     ax.axis('off')
-    ax.set_title('Beam Supports')
+    # ax.set_title('Beam Supports')
     
     plt.tight_layout()
     

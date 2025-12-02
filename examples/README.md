@@ -43,6 +43,22 @@ Comparison of different cross-section types:
 - Rectangular Hollow Section (RHS)
 - Shows how section shape affects beam behavior
 
+### `line_plots.py`
+Demonstrates how to generate 2D line plots for:
+- Shear Force Diagrams
+- Bending Moment Diagrams
+- Deflection Diagrams
+- Axial/Torsion Diagrams
+
+### `support_reactions.py`
+Demonstrates how to access numerical support reaction values:
+- Continuous beam with multiple supports
+- Complex multi-axial loading
+- Accessing reaction forces (Fx, Fy, Fz) and moments (Mx, My, Mz) programmatically
+
+### `support_plot.py`
+Demonstrates how to visualize the beam supports in 2D.
+
 ## Running Examples
 
 All examples save their plots to the `gallery/` directory. 

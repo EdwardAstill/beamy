@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List
 
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -89,6 +89,9 @@ def _plot_moments(ax, moments, beam_length):
     # Max arc radius is 1/10 of beam length
     max_arc_radius = beam_length / 10.0
     
+    all_side_faces = []
+    all_base_faces = []
+    
     for m in moments:
         magnitude = np.linalg.norm(m.moment)
         if magnitude < 1e-10:
@@ -123,19 +126,21 @@ def _plot_moments(ax, moments, beam_length):
         side_faces, base_face = _create_arrow_cone(
             tip, end_dir, cone_length, cone_radius, num_segments=12
         )
-        
-        # Draw in order: side faces, then base, then arc
-        # Side faces in blue
-        side_collection = Poly3DCollection(side_faces, facecolor='blue', edgecolor='blue', alpha=1.0)
-        ax.add_collection3d(side_collection)
-        
-        # Base face in lighter blue
-        base_collection = Poly3DCollection(base_face, facecolor='#4444dd', edgecolor='#4444dd', alpha=1.0)
-        ax.add_collection3d(base_collection)
+        all_side_faces.extend(side_faces)
+        all_base_faces.extend(base_face)
         
         # Draw arc (on top)
         ax.plot(arc_points[:, 0], arc_points[:, 1], arc_points[:, 2],
                 color='blue', linewidth=2, zorder=100)
+
+    # Batch render cones
+    if all_side_faces:
+        side_collection = Poly3DCollection(all_side_faces, facecolor='blue', edgecolor='blue', alpha=1.0)
+        ax.add_collection3d(side_collection)
+    
+    if all_base_faces:
+        base_collection = Poly3DCollection(all_base_faces, facecolor='#4444dd', edgecolor='#4444dd', alpha=1.0)
+        ax.add_collection3d(base_collection)
 
 
 def _plot_distributed_forces(ax, dist_forces, beam_length):
@@ -167,6 +172,9 @@ def _plot_distributed_forces(ax, dist_forces, beam_length):
     
     # Longest arrow should be 1/5th the length of the beam
     max_arrow_length = beam_length / 5.0
+    
+    all_side_faces = []
+    all_base_faces = []
     
     for df in dist_forces:
         # Calculate distributed load length
@@ -229,16 +237,10 @@ def _plot_distributed_forces(ax, dist_forces, beam_length):
             tail = tip - direction * arrow_length
             tail_positions.append(tail)
             
-            # Create and draw the cone (arrow head) with fixed size
+            # Create cone faces
             side_faces, base_face = _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=12)
-            
-            # Side faces in green
-            side_collection = Poly3DCollection(side_faces, facecolor='green', edgecolor='green', alpha=1.0)
-            ax.add_collection3d(side_collection)
-            
-            # Base face in lighter green
-            base_collection = Poly3DCollection(base_face, facecolor='#44dd44', edgecolor='#44dd44', alpha=1.0)
-            ax.add_collection3d(base_collection)
+            all_side_faces.extend(side_faces)
+            all_base_faces.extend(base_face)
             
             # Draw the arrow shaft
             cone_base = tip - direction * cone_length
@@ -252,6 +254,15 @@ def _plot_distributed_forces(ax, dist_forces, beam_length):
             tail_positions = np.array(tail_positions)
             ax.plot(tail_positions[:, 0], tail_positions[:, 1], tail_positions[:, 2],
                     color='green', linewidth=2, zorder=100)
+
+    # Batch render cones
+    if all_side_faces:
+        side_collection = Poly3DCollection(all_side_faces, facecolor='green', edgecolor='green', alpha=1.0)
+        ax.add_collection3d(side_collection)
+    
+    if all_base_faces:
+        base_collection = Poly3DCollection(all_base_faces, facecolor='#44dd44', edgecolor='#44dd44', alpha=1.0)
+        ax.add_collection3d(base_collection)
 
 
 def _plot_supports(ax, supports, beam_length):
@@ -352,6 +363,9 @@ def _plot_point_forces(ax, point_forces, beam_length):
     # Longest arrow should be 1/5th the length of the beam
     max_arrow_length = beam_length / 5.0
     
+    all_side_faces = []
+    all_base_faces = []
+
     for pf in point_forces:
         # Extract Beam coordinates and forces
         # PointForce.point is [x, y, z]
@@ -380,26 +394,30 @@ def _plot_point_forces(ax, point_forces, beam_length):
         # Tail is at tip - direction * arrow_length (since tip is at point)
         tail = tip - direction * arrow_length
         
-        # Create and draw the cone (arrow head) FIRST
+        # Create cone faces
         cone_length = arrow_length * 0.2   # Cone is 20% of arrow length
         cone_radius = arrow_length * 0.08  # Cone radius is 8% of arrow length
         side_faces, base_face = _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=12)
+        all_side_faces.extend(side_faces)
+        all_base_faces.extend(base_face)
         
         cone_base = tip - direction * cone_length
-        
-        # Side faces in red
-        side_collection = Poly3DCollection(side_faces, facecolor='red', edgecolor='red', alpha=1.0)
-        ax.add_collection3d(side_collection)
-        
-        # Base face
-        base_collection = Poly3DCollection(base_face, facecolor='#ff4444', edgecolor='#ff4444', alpha=1.0)
-        ax.add_collection3d(base_collection)
         
         # Draw the arrow shaft line last so it appears on top
         ax.plot([tail[0], cone_base[0]], 
                 [tail[1], cone_base[1]], 
                 [tail[2], cone_base[2]], 
                 color='red', linewidth=2, zorder=100)
+
+    # Batch render cones
+    if all_side_faces:
+        side_collection = Poly3DCollection(all_side_faces, facecolor='red', edgecolor='red', alpha=1.0)
+        ax.add_collection3d(side_collection)
+    
+    if all_base_faces:
+        base_collection = Poly3DCollection(all_base_faces, facecolor='#ff4444', edgecolor='#ff4444', alpha=1.0)
+        ax.add_collection3d(base_collection)
+
 
 def plot_loads(ax, load_case, beam_length: float):
     if not load_case:
@@ -446,7 +464,7 @@ def _plot_stress_line(ax, loaded_beam: "LoadedBeam", length: float, n_points: in
     sm.set_array([])
     plt.colorbar(sm, ax=ax, label='Max Von Mises Stress', shrink=0.6, pad=-0.05)
 
-def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot_section: bool = True, save_path: Optional[str] = None):
+def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot_section: bool = True, plot_supports: bool = True, save_path: Optional[str] = None):
     """
     Plots a 3D beam diagram with:
     - Optional 2D section outline on the YZ plane at x=0 (shear center at origin)
@@ -457,6 +475,7 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
         loaded_beam: LoadedBeam object containing beam, loads, and analysis results.
         plot_stress: If True, color the beam axis by von Mises stress.
         plot_section: If True, draw the section outline at x=0.
+        plot_supports: If True, draw the supports.
         save_path: If provided, save the plot to this file path instead of showing it.
     """
     beam = loaded_beam.beam
@@ -557,7 +576,8 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     ax.set_zticks([])
     
     # Plot Supports last so they overlap everything
-    _plot_supports(ax, beam.supports, length)
+    if plot_supports:
+        _plot_supports(ax, beam.supports, length)
     
     # Set white background
     fig.patch.set_facecolor('white')
@@ -572,4 +592,3 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
         plt.close(fig)
     else:
         plt.show()
-

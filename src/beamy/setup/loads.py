@@ -42,14 +42,6 @@ class LoadCase:
     def add_distributed_force(self, df: DistributedForce):
         self.dist_forces.append(df)
 
-    def convert_dforces_to_pforces(self, n_points: int = 11) -> None:
-        """
-        Deprecated: Helper logic is now handled dynamically in _effective_point_forces.
-        Kept for compatibility if called explicitly, but does nothing to internal state
-        that isn't handled by properties.
-        """
-        pass
-
     @property
     def _effective_point_forces(self) -> List[PointForce]:
         """

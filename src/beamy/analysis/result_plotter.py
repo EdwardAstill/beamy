@@ -18,7 +18,7 @@ def plot_analysis_results(loaded_beam: LoadedBeam, save_path: Optional[str] = No
     # Setup the figure with 2x2 subplots
     # Changed figsize to be wider (16, 8) instead of (14, 10)
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 8))
-    fig.suptitle(f"Beam Analysis Results (L = {loaded_beam.beam.L})", fontsize=16)
+    # fig.suptitle(f"Beam Analysis Results (L = {loaded_beam.beam.L})", fontsize=16)
     
     # -----------------------------------------------------
     # 1. Shear Force Diagram (Fy, Fz)
