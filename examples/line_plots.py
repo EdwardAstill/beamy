@@ -71,7 +71,8 @@ print("Generating analysis plots...")
 plot_analysis_results(
     lb, 
     save_path=str(gallery_dir / "line_plots_example.svg"),
-    show=False  # Set to True to display interactively
+    show=False,  # Set to True to display interactively
+    units={'length': 'mm', 'force': 'N', 'moment': 'N.mm', 'deflection': 'mm'}
 )
 print(f"Plots saved to {gallery_dir / 'line_plots_example.svg'}")
 
