@@ -13,7 +13,7 @@ from .setup import (
     plot_beam_diagram,
     plot_loads,
 )
-from sectiony import Section, Geometry, Shape
+from sectiony import Section, Geometry
 from .analysis import (
     Result,
     AnalysisResult,
@@ -41,7 +41,6 @@ __all__ = [
     "plot_loads",
     "Section",
     "Geometry",
-    "Shape",
     "Result",
     "AnalysisResult",
     "LoadedBeam",

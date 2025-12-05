@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 
-from sectiony import Section, Geometry, Shape
+from sectiony import Section, Geometry
 
 def validate_support_type(support: str) -> str:
     """

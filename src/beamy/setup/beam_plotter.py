@@ -481,7 +481,7 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     beam = loaded_beam.beam
     load_case = loaded_beam.loads
     
-    if not beam.section.geometry or not beam.section.geometry.shapes:
+    if not beam.section.geometry or not beam.section.geometry.contours:
         print("Warning: Beam section has no geometry defined. Cannot plot.")
         return
 
@@ -497,8 +497,8 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     # Draw 2D section outline on the YZ plane at beam x=0
     if plot_section:
         # Coordinate mapping: Plot (X, Y, Z) = (Beam Z, Beam X, Beam Y)
-        for shape in beam.section.geometry.shapes:
-            pts = np.array(shape.points)
+        for contour in beam.section.geometry.contours:
+            pts = np.array(contour.discretize())
             if len(pts) < 3:
                 continue
             
@@ -539,8 +539,8 @@ def plot_beam_diagram(loaded_beam: "LoadedBeam", plot_stress: bool = False, plot
     # Get max section extent for scaling
     all_y = []
     all_z = []
-    for shape in beam.section.geometry.shapes:
-        pts = np.array(shape.points)
+    for contour in beam.section.geometry.contours:
+        pts = np.array(contour.discretize())
         all_y.extend(pts[:, 0] - sc_y)
         all_z.extend(pts[:, 1] - sc_z)
     
