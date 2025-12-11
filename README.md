@@ -1,4 +1,4 @@
-# Beamy
+﻿# Beamy
 
 Beamy is a lightweight Python package for 1D beam analysis, capable of handling static loads using Euler-Bernoulli beam theory. It supports axial, torsional, and transverse (shear/bending) analysis with 6 degrees of freedom per node.
 
@@ -82,3 +82,4 @@ For more detailed usage and examples, please refer to the [Documentation](docume
 ## License
 
 MIT
+
