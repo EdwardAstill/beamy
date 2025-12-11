@@ -810,6 +810,33 @@ class LoadedBeam:
         """
         plot_beam_diagram(self, plot_stress=plot_stress, plot_section=plot_section)
 
+    def check_aisc_chapter_f(self, length_unit: str, force_unit: str) -> Dict[str, Any]:
+        """
+        Run AISC 9th Edition Chapter F checks (ASD).
+        
+        Internally converts to AISC units (ksi, inches) before performing checks.
+        
+        Args:
+            length_unit: Unit of length used in your model (e.g., "m", "mm", "ft", "in")
+            force_unit: Unit of force used in your model (e.g., "N", "kN", "lbf", "kip")
+        
+        Returns:
+            Nested dictionary with check results including allowables, demands,
+            and pass/fail status for strong-axis, weak-axis, and shear.
+        
+        Raises:
+            ValueError: If material.Fy is missing or section dimensions unavailable.
+        
+        Examples:
+            >>> # SI units model
+            >>> results = loaded_beam.check_aisc_chapter_f("m", "N")
+            
+            >>> # US customary model
+            >>> results = loaded_beam.check_aisc_chapter_f("ft", "kip")
+        """
+        from ..checks.aisc_9 import check_chapter_f
+        return check_chapter_f(self, length_unit, force_unit)
+
 
     # ---------------------------------------------------------
     # Internal Analysis Logic

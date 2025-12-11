@@ -10,6 +10,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "sectiony" },
+    { name = "unity" },
 ]
 
 [package.metadata]
@@ -17,6 +18,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.7" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "sectiony", editable = "../sectiony" },
+    { name = "unity", editable = "../unity" },
 ]
 
 [[package]]
@@ -385,3 +387,14 @@ sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050 },
 ]
+
+[[package]]
+name = "unity"
+version = "0.1.0"
+source = { editable = "../unity" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "numpy", specifier = ">=1.24.0" }]

@@ -29,6 +29,7 @@ class Material:
     name: str    # Material name
     E: float     # Young's modulus (force/length²)
     G: float     # Shear modulus (force/length²)
+    Fy: float    # Yield stress (force/length²) for code checks
     transparency: bool = False  # Used for plotting (affects alpha)
 ```
 
@@ -37,6 +38,7 @@ class Material:
 - `name` (str): Material identifier
 - `E` (float): Young's modulus (force/length²). Must be consistent with your length and force units.
 - `G` (float): Shear modulus (force/length²). Must be consistent with your length and force units.
+- `Fy` (float): Yield stress (force/length²). Required for AISC Chapter F checks.
 - `transparency` (bool): Optional flag used for plotting visualization (default: False)
 
 ### Example
