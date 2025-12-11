@@ -472,3 +472,42 @@ where $M_1$ is the **smaller** and $M_2$ the **larger** **end moment** (by magni
 ---
 
 **Tip:** In your F1.3 checklist, group the LTB inputs as: $l$, $r_T$ (from above), $A_f$, and $C_b$ (from above), then evaluate **(F1-6) or (F1-7)** and **(F1-8)** as applicable; take the **larger** allowable compressive stress, observing any caps in Chapter G.
+
+
+## Evaluating compactness (Table B5.1)
+| Description of Element                                                                                                                                                                                                                 | Width-Thickness Ratio | Compact                       | Noncompact                              |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------|-------------------------------|------------------------------------------|
+| Flanges of I-shaped rolled beams and channels in flexureᵃ                                                                                                                                                                              | b/t                    | 65/√Fy                       | 95/√Fy                                   |
+| Flanges of I-shaped welded beams in flexure                                                                                                                                                                                            | b/t                    | 65/√Fy                       | 95/√Fy / kcᵉ                             
+| Outstanding legs of pairs of angles in continuous contact; angles or plates projecting from rolled beams or columns; stiffeners on plate girders                                                                                      | b/t                    | NA                           | 95/√Fy                                   |
+| Angles or plates projecting from girders, built-up columns or other compression members; compression flanges of plate girders                                                                                                           | b/t                    | NA                           | 95/√Fy / kc                              |
+| Stems of tees                                                                                                                                                                                                                          | d/t                    | NA                           | 127/√Fy                                  |
+| Unstiffened elements simply supported along one edge, such as legs of single-angle struts, legs of double-angle struts with separators, and cross or star-shaped sections                                                             | b/t                    | NA                           | 76/√Fy                                   |
+| Flanges of square and rectangular box and hollow structural sections of uniform thickness subject to bending or compressionᵈ; flange cover plates and diaphragm plates between lines of fasteners or welds                             | b/t                    | 190/√Fy                      | 238/√Fy                                  |
+| Unsupported width of cover plates perforated with a succession of access holesᵇ                                                                                                                                                        | b/t                    | NA                           | 317/√Fy                                  |
+| All other uniformly compressed stiffened elements (supported along two edges)                                                                                                                                                          | b/t, h/tw              | NA                           | 253/√Fy                                  |
+| Webs in flexural compressionᵃ                                                                                                                                                                                                          | d/t                    | 640/√Fy                      | —                                        |
+|                                                                                                                                                                                                                                        | h/tw                   | —                             | 760/√Fb                                  |
+| Webs in combined flexural and axial compression                                                                                                                                                                                        | d/tw                   | for fa/Fy ≤ 0.16:<br>640/√Fy (1 − 3.74 fa/Fy)<br><br>for fa/Fy > 0.16:<br>257/√Fy | — |
+|                                                                                                                                                                                                                                        | h/tw                   | —                             | 760/√Fb                                  |
+| Circular hollow sections — axial compression                                                                                                                                                                                            | D/t                    | 3,300/Fy                     | —                                        |
+| Circular hollow sections — flexure                                                                                                                                                                                                      | D/t                    | 3,300/Fy                     | —                                        |
+
+
+Footnotes:
+
+
+- **a.** For hybrid beams, use the yield strength of the flange **F_yr** instead of **F_y**.
+
+- **b.** Assumes net area of plate at widest hole.
+
+- **c.** For design of slender sections that exceed the noncompact limits, see **Appendix B5**.
+
+- **d.** See also **Section F3.1**.
+
+- **e.**  $ k_c = \dfrac{4.05}{(h/t)^{0.46}} $ if $ h/t > 70 $; otherwise $ k_c = 1.0 $.
+
+
+
+
+

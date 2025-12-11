@@ -19,5 +19,5 @@ dependencies = [
 where = ["src"]
 
 [tool.uv.sources]
-sectiony = { path = "../sectiony", editable = true }
-unity = { path = "../unity", editable = true }
+sectiony = { git = "https://github.com/EdwardAstill/sectiony" }
+unity = { git = "https://github.com/EdwardAstill/unity" }
