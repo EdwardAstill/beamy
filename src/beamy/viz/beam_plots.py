@@ -1,0 +1,212 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING, Optional, List
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
+import numpy as np
+
+if TYPE_CHECKING:
+    from ..beam1d.analysis import LoadedBeam
+    from ..core.support import Support
+    from sectiony import Section
+
+def _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=8):
+    base_center = tip - direction * cone_length
+    if abs(direction[0]) < 0.9: perp1 = np.array([1, 0, 0])
+    else: perp1 = np.array([0, 1, 0])
+    perp1 = perp1 - np.dot(perp1, direction) * direction
+    perp1 /= np.linalg.norm(perp1)
+    perp2 = np.cross(direction, perp1)
+    perp2 /= np.linalg.norm(perp2)
+    base_points = [base_center + cone_radius * (np.cos(2*np.pi*i/num_segments)*perp1 + np.sin(2*np.pi*i/num_segments)*perp2) for i in range(num_segments)]
+    side_faces = [[tip, base_points[i], base_points[(i+1)%num_segments]] for i in range(num_segments)]
+    return side_faces, [base_points]
+
+def _plot_point_forces(ax, point_forces, beam_length):
+    if not point_forces: return
+    max_mag = max([np.linalg.norm(pf.force) for pf in point_forces]) or 1.0
+    max_arrow_L = beam_length / 5.0
+    all_s, all_b = [], []
+    for pf in point_forces:
+        px, py, pz = pf.point; fx, fy, fz = pf.force
+        tip, f_vec = np.array([pz, px, py]), np.array([fz, fx, fy])
+        mag = np.linalg.norm(f_vec)
+        arrow_L = (mag / max_mag) * max_arrow_L if max_mag > 0 else max_arrow_L
+        direction = f_vec / mag if mag > 0 else np.array([1,0,0])
+        tail = tip - direction * arrow_L
+        side, base = _create_arrow_cone(tip, direction, arrow_L*0.2, arrow_L*0.08, 12)
+        all_s.extend(side); all_b.extend(base)
+        c_base = tip - direction * arrow_L*0.2
+        ax.plot([tail[0], c_base[0]], [tail[1], c_base[1]], [tail[2], c_base[2]], color='red', lw=2, zorder=100)
+    if all_s: ax.add_collection3d(Poly3DCollection(all_s, facecolor='red', edgecolor='red'))
+    if all_b: ax.add_collection3d(Poly3DCollection(all_b, facecolor='#ff4444', edgecolor='#ff4444'))
+
+def _plot_distributed_forces(ax, dist_forces, beam_length):
+    if not dist_forces: return
+    max_mag = max([max(np.linalg.norm(df.start_force), np.linalg.norm(df.end_force)) for df in dist_forces]) or 1.0
+    max_arrow_L = beam_length / 5.0
+    all_s, all_b = [], []
+    for df in dist_forces:
+        L_load = np.linalg.norm(df.end_position - df.start_position)
+        if L_load < 1e-10: continue
+        avg_mag = (np.linalg.norm(df.start_force) + np.linalg.norm(df.end_force)) / 2.0
+        avg_L = (avg_mag / max_mag) * max_arrow_L
+        n_arrows = max(2, int(np.ceil((L_load / beam_length) * 10)))
+        ts = np.linspace(0, 1, n_arrows)
+        pos_interp = np.outer(1-ts, df.start_position) + np.outer(ts, df.end_position)
+        force_interp = np.outer(1-ts, df.start_force) + np.outer(ts, df.end_force)
+        tails = []
+        for i in range(n_arrows):
+            tip, f_vec = np.array([pos_interp[i,2], pos_interp[i,0], pos_interp[i,1]]), np.array([force_interp[i,2], force_interp[i,0], force_interp[i,1]])
+            mag = np.linalg.norm(f_vec)
+            if mag < 1e-10: continue
+            arrow_L = (mag / max_mag) * max_arrow_L
+            direction = f_vec / mag
+            tail = tip - direction * arrow_L; tails.append(tail)
+            side, base = _create_arrow_cone(tip, direction, avg_L*0.2, avg_L*0.08, 12)
+            all_s.extend(side); all_b.extend(base)
+            ax.plot([tail[0], tip[0]-direction*avg_L*0.2], [tail[1], tip[1]-direction*avg_L*0.2], [tail[2], tip[2]-direction*avg_L*0.2], color='green', lw=2, zorder=100)
+        if len(tails) >= 2:
+            tails = np.array(tails)
+            ax.plot(tails[:,0], tails[:,1], tails[:,2], color='green', lw=2, zorder=100)
+    if all_s: ax.add_collection3d(Poly3DCollection(all_s, facecolor='green', edgecolor='green'))
+    if all_b: ax.add_collection3d(Poly3DCollection(all_b, facecolor='#44dd44', edgecolor='#44dd44'))
+
+def _plot_moments(ax, moments, beam_L):
+    if not moments: return
+    max_mag = max([np.linalg.norm(m.moment) for m in moments]) or 1.0
+    max_R = beam_L / 10.0
+    all_s, all_b = [], []
+    for m in moments:
+        mag = np.linalg.norm(m.moment)
+        if mag < 1e-10: continue
+        center = np.array([0, m.x, 0])
+        R = (mag / max_mag) * max_R
+        m_plot = np.array([m.moment[2], m.moment[0], m.moment[1]])
+        n = m_plot / np.linalg.norm(m_plot)
+        u = np.array([1,0,0]) if abs(n[0]) < 0.9 else np.array([0,1,0])
+        u = (u - np.dot(u, n) * n); u /= np.linalg.norm(u)
+        v = np.cross(n, u)
+        angles = np.linspace(0, 1.5*np.pi, 30)
+        arc = np.array([center + R*(np.cos(a)*u + np.sin(a)*v) for a in angles])
+        end_dir = -np.sin(1.5*np.pi)*u + np.cos(1.5*np.pi)*v
+        tip = arc[-1] + end_dir * R*0.3
+        side, base = _create_arrow_cone(tip, end_dir, R*0.3, R*0.12, 12)
+        all_s.extend(side); all_b.extend(base)
+        ax.plot(arc[:,0], arc[:,1], arc[:,2], color='blue', lw=2, zorder=100)
+    if all_s: ax.add_collection3d(Poly3DCollection(all_s, facecolor='blue', edgecolor='blue'))
+    if all_b: ax.add_collection3d(Poly3DCollection(all_b, facecolor='#4444dd', edgecolor='#4444dd'))
+
+def plot_beam_diagram(loaded_beam: LoadedBeam, plot_stress=False, plot_section=True, plot_supports=True, save_path=None):
+    beam, loads = loaded_beam.beam, loaded_beam.loads
+    fig = plt.figure(figsize=(12, 8)); ax = fig.add_subplot(111, projection='3d')
+    sc_y, sc_z = getattr(beam.section, 'SCy', 0.0), getattr(beam.section, 'SCz', 0.0)
+    if plot_section and beam.section.geometry:
+        for contour in beam.section.geometry.contours:
+            pts = np.array(contour.discretize())
+            y, z = pts[:,0]-sc_y, pts[:,1]-sc_z
+            ax.plot(z, np.zeros_like(z), y, color='grey', lw=1.5)
+            ax.add_collection3d(Poly3DCollection([list(zip(z, np.zeros_like(z), y))], facecolor='grey', alpha=0.3))
+    if plot_stress:
+        res = loaded_beam.von_mises(100)
+        pts = np.array([[0, x, 0] for x in res._x])
+        segments = np.array([[pts[i], pts[i+1]] for i in range(len(pts)-1)])
+        norm = Normalize(vmin=res.min(), vmax=res.max())
+        colors = cm.plasma(norm((res._values[:-1]+res._values[1:])/2))
+        ax.add_collection3d(Line3DCollection(segments, colors=colors, lw=3))
+        plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cm.plasma), ax=ax, label='Max Von Mises Stress', shrink=0.6)
+    else: ax.plot([0,0], [0,beam.L], [0,0], color='black', lw=2)
+    _plot_point_forces(ax, loads.point_forces, beam.L)
+    _plot_moments(ax, loads.moments, beam.L)
+    _plot_distributed_forces(ax, loads.dist_forces, beam.L)
+    if plot_supports:
+        for s in beam.supports:
+            ax.scatter([0], [s.x], [0], marker='o', ec='black', fc='white', s=50, zorder=300)
+            ax.text(0, s.x, beam.L/60, s.type, fontsize=8, ha='center', color='black', zorder=200)
+    all_y, all_z = [], []
+    if beam.section.geometry:
+        for c in beam.section.geometry.contours: p=np.array(c.discretize()); all_y.extend(p[:,0]-sc_y); all_z.extend(p[:,1]-sc_z)
+    yz_R = max(max(abs(min(all_y or [0])), abs(max(all_y or [0])), abs(min(all_z or [0])), abs(max(all_z or [0])))*1.5, beam.L*0.1)
+    ax.set_xlim(-yz_R, yz_R); ax.set_ylim(0, beam.L); ax.set_zlim(-yz_R, yz_R)
+    ax.set_box_aspect([2*yz_R, beam.L, 2*yz_R]); ax.grid(False)
+    for p in [ax.xaxis, ax.yaxis, ax.zaxis]: p.set_pane_color((1,1,1,0))
+    ax.xaxis.line.set_color((1,1,1,0)); ax.set_xticks([]); ax.set_ylabel('x', labelpad=20); ax.set_zlabel('y', labelpad=-10); ax.set_zticks([])
+    fig.patch.set_facecolor('white'); ax.set_facecolor('white'); ax.view_init(elev=20, azim=-60)
+    if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300); plt.close(fig)
+    else: plt.show()
+
+def plot_analysis_results(loaded_beam: LoadedBeam, save_path=None, show=True, points=100, units=None):
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 8))
+    u = units or {}
+    ul, uf, um, ud = [f" ({u[k]})" if k in u else "" for k in ['length', 'force', 'moment', 'deflection']]
+    sy, sz = loaded_beam.shear("y", points), loaded_beam.shear("z", points)
+    ax1.plot(sy.action._x, sy.action._values, label="y-axis"); ax1.plot(sz.action._x, sz.action._values, label="z-axis", ls="--")
+    ax1.set_title("Shear Force"); ax1.set_xlabel(f"Position{ul}"); ax1.set_ylabel(f"Force{uf}"); ax1.legend(); ax1.grid(True, ls=':', alpha=0.6); ax1.axhline(0, c='k', lw=0.5)
+    by, bz = loaded_beam.bending("y", points), loaded_beam.bending("z", points)
+    ax2.plot(by.action._x, by.action._values, label="z-axis"); ax2.plot(bz.action._x, bz.action._values, label="y-axis", ls="--")
+    ax2.set_title("Bending Moment"); ax2.set_xlabel(f"Position{ul}"); ax2.set_ylabel(f"Moment{um}"); ax2.legend(); ax2.grid(True, ls=':', alpha=0.6); ax2.axhline(0, c='k', lw=0.5)
+    dy, dz = loaded_beam.deflection("y", points), loaded_beam.deflection("z", points)
+    ax3.plot(dy._x, dy._values, label="y-axis"); ax3.plot(dz._x, dz._values, label="z-axis", ls="--")
+    ax3.set_title("Deflection"); ax3.set_xlabel(f"Position{ul}"); ax3.set_ylabel(f"Displacement{ud}"); ax3.legend(); ax3.grid(True, ls=':', alpha=0.6); ax3.axhline(0, c='k', lw=0.5)
+    ax_res, tor = loaded_beam.axial(points), loaded_beam.torsion(points)
+    l1 = ax4.plot(ax_res.action._x, ax_res.action._values, label="Axial Force", color="red"); ax4.set_ylabel(f"Axial Force{uf}", color="red")
+    ax4_r = ax4.twinx(); l2 = ax4_r.plot(tor.action._x, tor.action._values, label="Torsion", color="purple", ls="--"); ax4_r.set_ylabel(f"Torsion Moment{um}", color="purple")
+    ax4.set_title("Axial Force & Torsion"); ax4.set_xlabel(f"Position{ul}"); ax4.grid(True, ls=':', alpha=0.6); ax4.axhline(0, c='k', lw=0.5)
+    lns = l1+l2; ax4.legend(lns, [l.get_label() for l in lns])
+    plt.tight_layout()
+    if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    if show: plt.show()
+
+class StressPlotter:
+    """Plots stress distributions on the beam's cross-section."""
+    def __init__(self, loaded_beam: LoadedBeam):
+        self.loaded_beam = loaded_beam
+        self.beam = loaded_beam.beam
+
+    def _get_internal_forces_at(self, x_pos: float) -> dict[str, float]:
+        def get_val(analysis_res, x):
+            return np.interp(x, analysis_res.action._x, analysis_res.action._values)
+        return {
+            "N": get_val(self.loaded_beam.axial(), x_pos),
+            "Vy": get_val(self.loaded_beam.shear("y"), x_pos),
+            "Vz": get_val(self.loaded_beam.shear("z"), x_pos),
+            "Mx": get_val(self.loaded_beam.torsion(), x_pos),
+            "My": get_val(self.loaded_beam.bending("z"), x_pos),
+            "Mz": get_val(self.loaded_beam.bending("y"), x_pos)
+        }
+
+    def plot_stress_at(self, x_pos: float, stress_type="von_mises", ax=None, show=True, cmap="viridis", title=None):
+        from sectiony.stress import Stress
+        f = self._get_internal_forces_at(x_pos)
+        stress = Stress(section=self.beam.section, N=f["N"], Vy=f["Vy"], Vz=f["Vz"], Mx=f["Mx"], My=f["My"], Mz=f["Mz"])
+        ax = stress.plot(stress_type=stress_type, ax=ax, show=False, cmap=cmap)
+        if ax:
+            ax.set_title(title or f"{ax.get_title()}\n@ x={x_pos:.3f}")
+            if show: plt.show()
+        return ax
+
+def plot_section(section: Section, ax: Optional[plt.Axes] = None, show: bool = True) -> Optional[plt.Axes]:
+    from sectiony.plotter import plot_section as sectiony_plot_section
+    return sectiony_plot_section(section, ax=ax, show=show)
+
+def plot_loads(ax, load_case, beam_length: float):
+    if not load_case: return
+    _plot_point_forces(ax, load_case.point_forces, beam_length)
+    _plot_moments(ax, load_case.moments, beam_length)
+    _plot_distributed_forces(ax, load_case.dist_forces, beam_length)
+
+def plot_supports(supports: List[Support], beam_length: float, unit: str = "m", save_path: Optional[str] = None, show: bool = True):
+    fig, ax = plt.subplots(figsize=(10, 2))
+    ax.plot([0, beam_length], [0, 0], color='black', lw=2, zorder=1)
+    if supports:
+        xs = [s.x for s in supports]
+        ax.scatter(xs, [0]*len(xs), marker='o', color='red', s=100, zorder=2)
+        for s in supports:
+            ax.annotate(s.type, (s.x, 0), xytext=(0, 15), textcoords='offset points', ha='center', rotation=45)
+            ax.annotate(f"{s.x} {unit}", (s.x, 0), xytext=(0, -20), textcoords='offset points', ha='center', va='top')
+    ax.set_xlim(-beam_length*0.1, beam_length*1.1); ax.set_ylim(-1, 1); ax.axis('off')
+    plt.tight_layout()
+    if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    if show: plt.show()
+

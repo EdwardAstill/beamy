@@ -28,9 +28,11 @@ from beamy.frame import (
     Node, Member, Frame, FrameLoadCase, LoadedFrame
 )
 
-# Create gallery directory
+# Create gallery subdirectories
 gallery_dir = Path("gallery")
 gallery_dir.mkdir(exist_ok=True)
+frame_dir = gallery_dir / "frame"
+frame_dir.mkdir(exist_ok=True)
 
 # ============================================
 # 1. DEFINE MATERIALS AND SECTIONS
@@ -152,7 +154,7 @@ print(f"  FZ={total_reaction[2]/1000:8.2f} kN (should = {(gravity_load * beam_le
 applied_vertical = gravity_load * beam_length + midspan_load
 applied_horizontal = wind_load
 print(f"\nEquilibrium check:")
-print(f"  Horizontal: {abs(total_reaction[0] - applied_horizontal) < 1e-6} (error: {abs(total_reaction[0] - applied_horizontal):.2e} N)")
+print(f"  Horizontal: {abs(total_reaction[0] + applied_horizontal) < 1e-6} (error: {abs(total_reaction[0] + applied_horizontal):.2e} N)")
 print(f"  Vertical:   {abs(total_reaction[2] - applied_vertical) < 1e-6} (error: {abs(total_reaction[2] - applied_vertical):.2e} N)")
 
 # ============================================
@@ -195,7 +197,7 @@ print("1. Frame geometry with loads and reactions...")
 loaded_frame.plot(
     deformed=True,
     scale_factor=50,
-    save_path=str(gallery_dir / "portal_frame_geometry.svg")
+    save_path=str(frame_dir / "portal_frame_geometry.svg")
 )
 
 # Deflection plot - colored by displacement magnitude
@@ -204,28 +206,28 @@ loaded_frame.plot_deflection(
     scale_factor=50,
     colormap="viridis",
     show_undeformed=True,
-    save_path=str(gallery_dir / "portal_frame_deflection.svg")
+    save_path=str(frame_dir / "portal_frame_deflection.svg")
 )
 
 # Von Mises stress plot
 print("3. Von Mises stress distribution...")
 loaded_frame.plot_von_mises(
-    colormap="jet",
+    colormap="turbo",
     stress_limits=(0, steel.Fy),  # Cap colorbar at yield stress
-    save_path=str(gallery_dir / "portal_frame_von_mises.svg")
+    save_path=str(frame_dir / "portal_frame_von_mises.svg")
 )
 
 # Member force diagrams
 print("4. Beam internal force diagrams...")
 loaded_frame.plot_member_diagrams(
     "beam",
-    save_path=str(gallery_dir / "portal_frame_beam_diagrams.svg")
+    save_path=str(frame_dir / "portal_frame_beam_diagrams.svg")
 )
 
 print(f"\n{'=' * 60}")
 print("COMPLETE!")
 print("=" * 60)
-print(f"\nPlots saved to: {gallery_dir.absolute()}/")
+print(f"\nPlots saved to: {frame_dir.absolute()}/")
 print("  - portal_frame_geometry.svg")
 print("  - portal_frame_deflection.svg")
 print("  - portal_frame_von_mises.svg")
@@ -242,3 +244,4 @@ print("* Direct stiffness method analysis")
 print("* Support reactions and equilibrium verification")
 print("* Member force/stress/deflection results")
 print("* 3D wireframe visualization with color mapping")
+

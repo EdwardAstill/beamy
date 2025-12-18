@@ -1,9 +1,6 @@
-# beam.py
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
-
-from sectiony import Section, Geometry
+from typing import List
 
 def validate_support_type(support: str) -> str:
     """
@@ -17,19 +14,11 @@ def validate_support_type(support: str) -> str:
     Position 5: Ry (rotation about y) - 0=free, 1=constrained
     Position 6: Rz (rotation about z) - 0=free, 1=constrained
     
-    Examples:
-    - "111111": Fully fixed (all DOFs constrained)
-    - "111000": Pinned (translations constrained, rotations free)
-    - "000000": Free (no constraints)
-    
     Args:
         support: 6-digit string of 0s and 1s
         
     Returns:
         Validated support string
-        
-    Raises:
-        ValueError: If support string is invalid
     """
     if not isinstance(support, str):
         raise ValueError(f"Support must be a string, got {type(support)}")
@@ -40,7 +29,9 @@ def validate_support_type(support: str) -> str:
     return support
 
 def validate_support_pairs(supports: List[Support]):
-
+    """Validate that the structure is properly constrained globally."""
+    # Note: These checks are for 1D beam stability. 
+    # For Frame, we use Frame._validate_supports().
     if not any(support.type[0] == '1' for support in supports):
         raise ValueError("Beam must be supported in x direction at one or more nodes")
     if not any(support.type[1] == '1' for support in supports):
@@ -51,16 +42,6 @@ def validate_support_pairs(supports: List[Support]):
         raise ValueError("Beam must be supported in rotation about x axis at one or more nodes")
     for support in supports:
         validate_support_type(support.type)
-
-
-@dataclass
-class Material:
-    name: str
-    E: float  # Young's modulus
-    G: float  # Shear modulus
-    Fy: Optional[float] = None  # Yield stress (needed for AISC checks)
-    transparency: bool = False  # Used for plotting (affects alpha)
-
 
 @dataclass
 class Support:
@@ -76,19 +57,3 @@ class Support:
     def __post_init__(self):
         self.type = validate_support_type(self.type)
 
-@dataclass
-class Beam1D:
-    """
-    Straight prismatic beam along local x in [0, L].
-    
-    Nodes are the points along the beam axis where the beam is supported.
-    Each node contains a position (x) and support conditions (6-digit string).
-    """
-    L: float
-    material: Material
-    section: Section
-    supports: List[Support]
-
-    def __post_init__(self):
-        """Validate the supports using validate_support_pairs."""
-        validate_support_pairs(self.supports)

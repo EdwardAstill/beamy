@@ -1,74 +1,44 @@
-from .setup import (
-    Beam1D,
-    Material,
-    Support,
-    validate_support_type,
-    validate_support_pairs,
-    PointForce,
-    DistributedForce,
-    Moment,
-    LoadCase,
+from .core.material import Material
+from .core.support import Support, validate_support_type, validate_support_pairs
+from .core.results import Result, AnalysisResult
+from .core.loads import (
+    PointForce, Moment, DistributedForce,
+    NodalForce, NodalMoment, MemberPointForce, MemberDistributedForce,
+    LoadCase, FrameLoadCase
+)
+from .beam1d.beam import Beam1D
+from .beam1d.analysis import LoadedBeam
+from .frame.node import Node
+from .frame.member import Member
+from .frame.frame import Frame
+from .frame.analysis import LoadedFrame
+from .frame.results import MemberResults
+
+from .viz import (
+    plot_beam_diagram,
+    plot_analysis_results,
+    StressPlotter,
     plot_section,
     plot_supports,
-    plot_beam_diagram,
     plot_loads,
-)
-from sectiony import Section, Geometry
-from .analysis import (
-    Result,
-    AnalysisResult,
-    LoadedBeam,
-    solve_x_reactions,
-    solve_transverse_reactions,
-    get_all_loads,
-    StressPlotter,
-    plot_analysis_results,
-)
-from .frame import (
-    Node,
-    Member,
-    Frame,
-    NodalForce,
-    NodalMoment,
-    MemberPointForce,
-    MemberDistributedForce,
-    FrameLoadCase,
-    LoadedFrame,
-    MemberResults,
+    plot_frame,
+    plot_deflection,
+    plot_von_mises,
+    plot_member_diagrams
 )
 
+from sectiony import Section, Geometry
+
 __all__ = [
-    "Beam1D",
-    "Material",
-    "Support",
-    "validate_support_type",
-    "validate_support_pairs",
-    "PointForce",
-    "DistributedForce",
-    "Moment",
-    "LoadCase",
-    "plot_section",
-    "plot_supports",
-    "plot_beam_diagram",
-    "plot_loads",
-    "Section",
-    "Geometry",
-    "Result",
-    "AnalysisResult",
-    "LoadedBeam",
-    "solve_x_reactions",
-    "solve_transverse_reactions",
-    "get_all_loads",
-    "StressPlotter",
-    "plot_analysis_results",
-    "Node",
-    "Member",
-    "Frame",
-    "NodalForce",
-    "NodalMoment",
-    "MemberPointForce",
-    "MemberDistributedForce",
-    "FrameLoadCase",
-    "LoadedFrame",
-    "MemberResults",
+    "Material", "Support", "validate_support_type", "validate_support_pairs",
+    "Result", "AnalysisResult",
+    "PointForce", "Moment", "DistributedForce",
+    "NodalForce", "NodalMoment", "MemberPointForce", "MemberDistributedForce",
+    "LoadCase", "FrameLoadCase",
+    "Beam1D", "LoadedBeam",
+    "Node", "Member", "Frame", "LoadedFrame", "MemberResults",
+    "plot_beam_diagram", "plot_analysis_results", "StressPlotter",
+    "plot_section", "plot_supports", "plot_loads",
+    "plot_frame", "plot_deflection", "plot_von_mises", "plot_member_diagrams",
+    "Section", "Geometry"
 ]

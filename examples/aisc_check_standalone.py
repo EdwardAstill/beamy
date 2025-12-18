@@ -65,7 +65,25 @@ def main() -> None:
     loaded_beam = LoadedBeam(beam, loads)
     results = loaded_beam.check_aisc_chapter_f(length_unit="m", force_unit="N")
 
-    print(results)
+    print(f"AISC Check Results for {loaded_beam.beam.section.name}:")
+    print(f"  Overall Pass: {results.pass_}")
+    print(f"  Overall Max Utilisation: {results.utilisation:.3f}")
+
+    print("\nBending Checks:")
+    for res in results.bending:
+        print(f"  Axis: {res.axis}")
+        print(f"  Max Utilisation: {res.utilisation:.3f}")
+        for i, seg in enumerate(res.segments):
+            print(f"    Segment {i+1} ({seg.x_start:.2f}m - {seg.x_end:.2f}m):")
+            print(f"      Governing Fb: {seg.governing_Fb:.1f} ksi")
+            print(f"      Demand Fb:    {seg.demand_Fb:.1f} ksi")
+            print(f"      Utilisation:  {seg.utilisation:.3f}")
+
+    print("\nShear Check:")
+    print(f"  Max Shear (V_max): {results.shear.V_max:.1f} kips")
+    if results.shear.capacity:
+        print(f"  Capacity:          {results.shear.capacity:.1f} kips")
+    print(f"  Utilisation:       {results.shear.utilisation:.3f}")
 
 
 if __name__ == "__main__":

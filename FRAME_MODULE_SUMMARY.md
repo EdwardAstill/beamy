@@ -216,3 +216,4 @@ The current implementation is complete and functional. Potential future addition
 ## 🎯 Summary
 
 **You now have full capability to apply forces to members (distributed and point loads), not just to nodes!** The frame module converts member loads to equivalent nodal loads during analysis, so you can specify loads in the most natural way for your structure.
+
