@@ -24,6 +24,18 @@ from .analysis import (
     StressPlotter,
     plot_analysis_results,
 )
+from .frame import (
+    Node,
+    Member,
+    Frame,
+    NodalForce,
+    NodalMoment,
+    MemberPointForce,
+    MemberDistributedForce,
+    FrameLoadCase,
+    LoadedFrame,
+    MemberResults,
+)
 
 __all__ = [
     "Beam1D",
@@ -49,4 +61,14 @@ __all__ = [
     "get_all_loads",
     "StressPlotter",
     "plot_analysis_results",
+    "Node",
+    "Member",
+    "Frame",
+    "NodalForce",
+    "NodalMoment",
+    "MemberPointForce",
+    "MemberDistributedForce",
+    "FrameLoadCase",
+    "LoadedFrame",
+    "MemberResults",
 ]
