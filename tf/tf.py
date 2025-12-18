@@ -26,7 +26,7 @@ import numpy as np
 from sectiony.library import rhs, chs
 
 from beamy import Material
-from beamy.frame import Frame, FrameBuilder, FrameLoadCase, LoadedFrame, round_coord
+from beamy.frame import Frame, FrameBuilder, FrameLoadCase, LoadedFrame
 
 
 @dataclass(frozen=True)
@@ -144,39 +144,28 @@ def build_frame_and_loads(
     fb = FrameBuilder()
 
     # === BASE FRAME (250x150x6 RHS) ===
-    # Left rail (X=125)
-    fb.add("M1", _mm(125, 0, 0), _mm(125, 750, 0), base_section, steel)
-    fb.add("M2", _mm(125, 750, 0), _mm(125, 1750, 0), base_section, steel)
-    fb.add("M3", _mm(125, 1750, 0), _mm(125, 2500, 0), base_section, steel)
-    # Right rail (X=1925)
-    fb.add("M4", _mm(1925, 0, 0), _mm(1925, 750, 0), base_section, steel)
-    fb.add("M5", _mm(1925, 750, 0), _mm(1925, 1750, 0), base_section, steel)
-    fb.add("M6", _mm(1925, 1750, 0), _mm(1925, 2500, 0), base_section, steel)
-    # Cross members at Y=750 (split at post locations)
-    fb.add("M7a", _mm(125, 750, 0), _mm(600, 750, 0), base_section, steel)
-    fb.add("M7b", _mm(600, 750, 0), _mm(1450, 750, 0), base_section, steel)
-    fb.add("M7c", _mm(1450, 750, 0), _mm(1925, 750, 0), base_section, steel)
-    # Cross members at Y=1750 (split at post locations)
-    fb.add("M8a", _mm(125, 1750, 0), _mm(600, 1750, 0), base_section, steel)
-    fb.add("M8b", _mm(600, 1750, 0), _mm(1450, 1750, 0), base_section, steel)
-    fb.add("M8c", _mm(1450, 1750, 0), _mm(1925, 1750, 0), base_section, steel)
+    # Define continuous members only; connectivity nodes are created automatically
+    # during analysis where posts/brace endpoints intersect these members.
+    fb.add("BASE_L", _mm(125, 0, 0), _mm(125, 2500, 0), base_section, steel)
+    fb.add("BASE_R", _mm(1925, 0, 0), _mm(1925, 2500, 0), base_section, steel)
+    fb.add("BASE_C1", _mm(125, 750, 0), _mm(1925, 750, 0), base_section, steel)
+    fb.add("BASE_C2", _mm(125, 1750, 0), _mm(1925, 1750, 0), base_section, steel)
 
     # === POSTS (150x150x6 RHS) ===
-    # Each post is split at Z=300 (for connecting member) and Z=load_height (for load application)
+    # Define each post as a single continuous member. The solver will auto-split
+    # at z=300 (brace connection) and at the load height.
     post_ori = (1, 0, 0)  # local Y along global X
     post_locations = [(600, 750), (600, 1750), (1450, 750), (1450, 1750)]
     
-    for i, (px, py) in enumerate(post_locations, start=9):
-        # Lower segment: 0 -> 300
-        fb.add(f"M{i}", _mm(px, py, 0), _mm(px, py, 300), post_section, steel, orientation=post_ori)
-        # Middle segment: 300 -> load height
-        fb.add(f"M{i}_u1", _mm(px, py, 300), _mm(px, py, z_load_mm), post_section, steel, orientation=post_ori)
-        # Upper segment: load height -> top
-        fb.add(f"M{i}_u2", _mm(px, py, z_load_mm), _mm(px, py, 1775), post_section, steel, orientation=post_ori)
+    post_ids: list[str] = []
+    for i, (px, py) in enumerate(post_locations, start=1):
+        pid = f"P{i}"
+        post_ids.append(pid)
+        fb.add(pid, _mm(px, py, 0), _mm(px, py, 1775), post_section, steel, orientation=post_ori)
 
     # Connecting members between posts at Z=300 (with rotation releases)
-    fb.add("M13", _mm(600, 750, 300), _mm(600, 1750, 300), post_section, steel, releases="000111000111")
-    fb.add("M14", _mm(1450, 750, 300), _mm(1450, 1750, 300), post_section, steel, releases="000111000111")
+    fb.add("BR1", _mm(600, 750, 300), _mm(600, 1750, 300), post_section, steel, releases="000111000111")
+    fb.add("BR2", _mm(1450, 750, 300), _mm(1450, 1750, 300), post_section, steel, releases="000111000111")
 
     # === SLINGS (cables) ===
     if include_slings:
@@ -186,51 +175,59 @@ def build_frame_and_loads(
         fb.add("SL3", _mm(1450, 750, 1775), lift_pt, sling_section, sling_mat, element_type="cable")
         fb.add("SL4", _mm(1450, 1750, 1775), lift_pt, sling_section, sling_mat, element_type="cable")
         
-        # Lift point support
+        # Lift point support (lift point is a member end, so it is a real node)
         if support_mode == "lifted":
             fb.support_at(lift_pt, "101000")  # Ux + Uz fixed
 
     # === SUPPORTS ===
     if support_mode == "elevated":
-        # All Z=0 nodes fully fixed
-        for coord in [_mm(125, 0, 0), _mm(125, 750, 0), _mm(125, 1750, 0), _mm(125, 2500, 0),
-                      _mm(1925, 0, 0), _mm(1925, 750, 0), _mm(1925, 1750, 0), _mm(1925, 2500, 0),
-                      _mm(600, 750, 0), _mm(600, 1750, 0), _mm(1450, 750, 0), _mm(1450, 1750, 0)]:
-            fb.support_at(coord, "111111")
+        # Minimal supports to satisfy Frame validation; full base fixity is applied
+        # via loads.support_member() after auto-splitting.
+        fb.support_at(_mm(125, 0, 0), "111111")
+        fb.support_at(_mm(1925, 2500, 0), "111111")
     else:  # lifted
         # Only two base nodes fixed in X/Y (Z free for lifting)
         fb.support_at(_mm(125, 0, 0), "110000")
         fb.support_at(_mm(1925, 2500, 0), "110000")
 
-    # Build frame and get coordinate mapping
-    frame, coord_to_node = fb.build_with_node_map()
+    # Build frame (coord mapping no longer needed)
+    frame = fb.build()
 
     # === LOADS ===
     loads = FrameLoadCase(spec.name)
     
-    # Apply forces and moments at load application points on each post
-    load_coords = [
-        (_mm(600, 750, z_load_mm), "row_front"),
-        (_mm(600, 1750, z_load_mm), "row_back"),
-        (_mm(1450, 750, z_load_mm), "row_front"),
-        (_mm(1450, 1750, z_load_mm), "row_back"),
-    ]
-    for coord, row in load_coords:
-        node_id = coord_to_node[round_coord(coord)]
-        loads.add_nodal_force(node_id, np.array([0.0, 0.0, -spec.force_on_each_column_n]))
-        # Moment bends posts toward each other in Y-Z plane
+    # Apply forces and moments at load application points on each post (LOCAL coords)
+    # Posts run along local x (global +Z), so a global -Z force becomes local Fx=-F.
+    # The applied global Mx becomes a local My for these posts (given post_ori).
+    post_rows = ["row_front", "row_back", "row_front", "row_back"]
+    for pid, row in zip(post_ids, post_rows):
         moment_sign = 1.0 if row == "row_front" else -1.0
-        loads.add_nodal_moment(node_id, np.array([moment_sign * spec.moment_on_each_beam_nm, 0.0, 0.0]))
+        loads.add_member_point_load(
+            pid,
+            position=spec.applied_height_m,
+            force=np.array([-spec.force_on_each_column_n, 0.0, 0.0]),
+            moment=np.array([0.0, moment_sign * spec.moment_on_each_beam_nm, 0.0]),
+            coords="local",
+            position_type="absolute",
+        )
+
+    # Elevated case: fix the entire base (all nodes created on those members)
+    if support_mode == "elevated":
+        for mid in ["BASE_L", "BASE_R", "BASE_C1", "BASE_C2"]:
+            loads.support_member(mid, "111111")
 
     # Distributed self-weight on base members for lifted case
     if support_mode == "lifted":
-        base_member_ids = ["M1", "M2", "M3", "M4", "M5", "M6", "M7a", "M7b", "M7c", "M8a", "M8b", "M8c"]
+        base_member_ids = ["BASE_L", "BASE_R", "BASE_C1", "BASE_C2"]
         base_total_length = _sum_lengths(frame, base_member_ids)
         w = spec.base_force_n / base_total_length  # N/m
         for mid in base_member_ids:
-            loads.add_member_uniform_force(mid, np.array([0.0, 0.0, -w]), coords="global")
+            m = frame.get_member(mid)
+            w_global = np.array([0.0, 0.0, -w])
+            w_local = m.transformation_matrix @ w_global
+            loads.add_member_uniform_force(mid, w_local, coords="local")
 
-    return frame, loads, coord_to_node
+    return frame, loads, {}
 
 
 def run_case(
