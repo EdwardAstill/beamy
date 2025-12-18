@@ -1,10 +1,31 @@
 from __future__ import annotations
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import numpy as np
 
 from ..core.math import build_local_stiffness_matrix, build_transformation_matrix_12x12
 from .frame import Frame
 from .member import Member
+
+def build_local_truss_stiffness_matrix(L: float, E: float, A: float, axial_scale: float = 1.0) -> np.ndarray:
+    """
+    Build a 12x12 local stiffness matrix for an axial-only element (truss/cable) embedded
+    in the 3D frame DOF set [UX UY UZ RX RY RZ] at each node.
+
+    Only the local axial translation DOFs (start UX = 0, end UX = 6) carry stiffness.
+    All other DOFs have zero stiffness (they are not coupled by this element).
+
+    axial_scale can be used to "slacken" a cable (e.g. in compression).
+    """
+    k = np.zeros((12, 12))
+    if L <= 0.0:
+        raise ValueError("L must be positive")
+    EA_L = (E * A / L) * axial_scale
+    k[0, 0] = EA_L
+    k[0, 6] = -EA_L
+    k[6, 0] = -EA_L
+    k[6, 6] = EA_L
+    return k
+
 
 def apply_releases(k_local: np.ndarray, releases: str) -> np.ndarray:
     """
@@ -30,7 +51,11 @@ def apply_releases(k_local: np.ndarray, releases: str) -> np.ndarray:
     
     return k_modified
 
-def analyze_frame_geometry(frame: Frame, node_to_idx: Dict[str, int]) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+def analyze_frame_geometry(
+    frame: Frame,
+    node_to_idx: Dict[str, int],
+    member_axial_scales: Optional[Dict[str, float]] = None,
+) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
     """
     Build global stiffness matrix for a frame.
     """
@@ -40,15 +65,27 @@ def analyze_frame_geometry(frame: Frame, node_to_idx: Dict[str, int]) -> Tuple[n
     member_matrices = {}
 
     for member in frame.members:
-        # Build matrices
-        k_local = build_local_stiffness_matrix(
-            member.length, member.material.E, member.material.G,
-            member.section.A, member.section.Iy, member.section.Iz, member.section.J
-        )
-        
-        # Apply member end releases if specified
-        if member.releases:
-            k_local = apply_releases(k_local, member.releases)
+        axial_scale = 1.0
+        if member_axial_scales is not None and member.id in member_axial_scales:
+            axial_scale = float(member_axial_scales[member.id])
+
+        # Build matrices (beam vs truss/cable)
+        if member.element_type == "beam":
+            k_local = build_local_stiffness_matrix(
+                member.length, member.material.E, member.material.G,
+                member.section.A, member.section.Iy, member.section.Iz, member.section.J
+            )
+            # Apply member end releases only for beam elements
+            if member.releases:
+                k_local = apply_releases(k_local, member.releases)
+        else:
+            # truss/cable: axial-only
+            k_local = build_local_truss_stiffness_matrix(
+                L=member.length,
+                E=member.material.E,
+                A=member.section.A,
+                axial_scale=axial_scale,
+            )
         
         T = build_transformation_matrix_12x12(member.transformation_matrix)
         k_global = T.T @ k_local @ T

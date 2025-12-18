@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Literal
 import numpy as np
 from sectiony import Section
 from ..core.material import Material
@@ -17,6 +17,7 @@ class Member:
     section: Section
     material: Material
     orientation: np.ndarray
+    element_type: Literal["beam", "truss", "cable"] = "beam"
     releases: Optional[str] = None
     constraints: Optional[str] = None
     _start_node: Optional[Node] = None
@@ -26,6 +27,8 @@ class Member:
         if not isinstance(self.orientation, np.ndarray): self.orientation = np.array(self.orientation, dtype=float)
         if self.orientation.shape != (3,): raise ValueError(f"Orientation must be 3D vector, got {self.orientation.shape}")
         if np.linalg.norm(self.orientation) < 1e-10: raise ValueError(f"Member {self.id}: orientation cannot be zero")
+        if self.element_type not in ("beam", "truss", "cable"):
+            raise ValueError(f"Member {self.id}: element_type must be 'beam', 'truss', or 'cable', got '{self.element_type}'")
         if self.releases and (len(self.releases) != 12 or not all(c in '01' for c in self.releases)):
             raise ValueError(f"Member {self.id}: releases must be 12-digit 0/1 string")
         if self.constraints and (len(self.constraints) != 12 or not all(c in "01" for c in self.constraints)):

@@ -54,6 +54,24 @@ def _member_deformed_points(
     d_s_g = loaded_frame.nodal_displacements[member.start_node_id]
     d_e_g = loaded_frame.nodal_displacements[member.end_node_id]
 
+    # Truss/cable plotting:
+    # These elements should NOT inherit beam end-rotations in the visualization.
+    # Draw them as straight lines between displaced nodes (translations only).
+    if getattr(member, "element_type", "beam") != "beam":
+        xis = np.linspace(0.0, 1.0, points_per_member)
+        pts_global = np.zeros((points_per_member, 3))
+        disp_mags = np.zeros(points_per_member)
+
+        u_s = d_s_g[:3]
+        u_e = d_e_g[:3]
+        for i, xi in enumerate(xis):
+            p0 = (1.0 - xi) * s + xi * e
+            u = (1.0 - xi) * u_s + xi * u_e
+            pts_global[i, :] = p0 + scale_factor * u
+            disp_mags[i] = float(np.linalg.norm(u))
+
+        return pts_global, disp_mags
+
     # Transform to member local coordinates
     # member.transformation_matrix has rows = local axes in global components
     r = member.transformation_matrix
@@ -92,10 +110,14 @@ def _member_deformed_points(
 
         # Transverse bending (cubic)
         n1, n2, n3, n4 = _beam_shape_functions(xi, L)
-        # v uses rotation about local z (rz)
+        # v (local y displacement) uses rotation about local z (rz).
+        # A positive rz (right-hand rule about z) produces a positive dv/dx.
         v = n1 * v1 + n2 * rz1 + n3 * v2 + n4 * rz2
-        # w uses rotation about local y (ry)
-        w = n1 * w1 + n2 * ry1 + n3 * w2 + n4 * ry2
+        
+        # w (local z displacement) uses rotation about local y (ry).
+        # In the local x-z plane, a positive ry (right-hand rule about y) 
+        # actually produces a NEGATIVE dw/dx slope (moving from Z towards X).
+        w = n1 * w1 + n2 * (-ry1) + n3 * w2 + n4 * (-ry2)
 
         d_l = np.array([u, v, w], dtype=float)
         d_g = r.T @ d_l
@@ -120,6 +142,7 @@ def _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=8)
 def plot_frame(
     loaded_frame: LoadedFrame,
     show_loads: bool = True,
+    show_moments: bool = True,
     show_member_ids: bool = False,
     show_node_ids: bool = True,
     deformed: bool = False,
@@ -127,7 +150,7 @@ def plot_frame(
     show_reactions: bool = False,
     save_path: Optional[str] = None
 ) -> None:
-    """Simplified frame geometry plot with constraint labels and force arrows."""
+    """Simplified frame geometry plot with constraint labels, force arrows, and moment vectors."""
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
     node_pos = loaded_frame.frame.node_positions
@@ -207,6 +230,64 @@ def plot_frame(
                     ax.add_collection3d(Poly3DCollection(all_sides, facecolor='red', edgecolor='red', alpha=0.9, zorder=100))
                 if all_bases:
                     ax.add_collection3d(Poly3DCollection(all_bases, facecolor='darkred', edgecolor='darkred', alpha=0.9, zorder=100))
+
+        # Plot applied nodal moments as curved arc arrows (like 1D beam plots)
+        if show_moments:
+            all_moments = [(node_pos[nm.node_id], nm.moment) for nm in loaded_frame.loads.nodal_moments]
+            if all_moments:
+                max_moment = max([np.linalg.norm(m) for _, m in all_moments])
+                if max_moment > 1e-12:
+                    all_pos = np.array(list(node_pos.values()))
+                    frame_size = np.max(all_pos.max(axis=0) - all_pos.min(axis=0))
+                    max_R = frame_size * 0.10  # radius of arc
+
+                    all_sides_m, all_bases_m = [], []
+                    for center, moment in all_moments:
+                        mag = np.linalg.norm(moment)
+                        if mag < 1e-12:
+                            continue
+                        
+                        # Arc radius scales with moment magnitude
+                        R = (mag / max_moment) * max_R
+                        
+                        # Moment axis (right-hand rule direction)
+                        n = moment / mag
+                        
+                        # Create two perpendicular vectors in the plane perpendicular to n
+                        if abs(n[0]) < 0.9:
+                            u = np.array([1.0, 0.0, 0.0])
+                        else:
+                            u = np.array([0.0, 1.0, 0.0])
+                        u = u - np.dot(u, n) * n
+                        u /= np.linalg.norm(u)
+                        v = np.cross(n, u)
+                        
+                        # Create arc (270 degrees, 1.5*pi radians)
+                        angles = np.linspace(0, 1.5 * np.pi, 30)
+                        arc = np.array([center + R * (np.cos(a) * u + np.sin(a) * v) for a in angles])
+                        
+                        # Tangent direction at end of arc
+                        end_tangent = -np.sin(1.5 * np.pi) * u + np.cos(1.5 * np.pi) * v
+                        
+                        # Arrow tip extends beyond arc end
+                        tip = arc[-1] + end_tangent * R * 0.3
+                        
+                        # Draw arc
+                        ax.plot(arc[:, 0], arc[:, 1], arc[:, 2], color='purple', lw=2.5, zorder=101)
+                        
+                        # Arrow cone at tip
+                        sides, bases = _create_arrow_cone(tip, end_tangent, R * 0.3, R * 0.12, 10)
+                        all_sides_m.extend(sides)
+                        all_bases_m.extend(bases)
+
+                    if all_sides_m:
+                        ax.add_collection3d(
+                            Poly3DCollection(all_sides_m, facecolor='purple', edgecolor='purple', alpha=0.85, zorder=101)
+                        )
+                    if all_bases_m:
+                        ax.add_collection3d(
+                            Poly3DCollection(all_bases_m, facecolor='indigo', edgecolor='indigo', alpha=0.85, zorder=101)
+                        )
     
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
