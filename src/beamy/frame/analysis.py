@@ -703,6 +703,140 @@ class LoadedFrame:
             member_loads=member_loads,
         )
 
+    def to_loaded_beam(self, member_id: str) -> 'LoadedBeam':
+        """
+        Extract a single member as a LoadedBeam for detailed analysis.
+        
+        For nodes with fixed supports, those supports are preserved.
+        For nodes without fixed supports, the reactions from the frame analysis
+        are applied as boundary loads (opposite direction to balance the member).
+        
+        Args:
+            member_id: The original (user-level) member ID to extract
+            
+        Returns:
+            A LoadedBeam object with the member isolated and properly loaded
+        """
+        from ..beam1d.beam import Beam1D
+        from ..core.support import Support
+        from ..core.loads import LoadCase, PointForce, Moment, DistributedForce
+        from ..beam1d.analysis import LoadedBeam
+        
+        # Resolve member: use original frame for user-level IDs
+        parent = self.original_frame.get_member(member_id)
+        
+        # Get the segment IDs if this member was split
+        seg_ids = self._member_bundle.get(member_id, [member_id])
+        if not seg_ids:
+            raise ValueError(f"No segments found for member {member_id}")
+        
+        first_seg_id = seg_ids[0]
+        last_seg_id = seg_ids[-1]
+        
+        # Get end forces from the expanded frame analysis
+        start_f, _ = self._member_end_forces[first_seg_id]
+        _, end_f = self._member_end_forces[last_seg_id]
+        
+        # Build the isolated beam with start support
+        beam = Beam1D(
+            L=parent.length,
+            material=parent.material,
+            section=parent.section,
+            supports=[Support(x=0.0, type="111111")]
+        )
+        lc = LoadCase(name=f"Member {member_id} extracted")
+        
+        # Get the node chain for this member to check for fixed supports
+        chain = self._member_nodes_along.get(member_id, [])
+        node_to_x = {nid: float(x) for x, nid in chain}
+        
+        # Find which nodes have fixed supports in the original frame
+        fixed_node_ids = set()
+        for nid, node in self.original_frame.nodes.items():
+            if node.support and all(c == "1" for c in node.support):
+                fixed_node_ids.add(nid)
+        
+        # Add loads from nodal forces/moments on the member's nodes
+        for nf in self.loads.nodal_forces:
+            if nf.node_id in node_to_x:
+                x = node_to_x[nf.node_id]
+                f_g = nf.force if getattr(nf, "coords", "global") == "global" else self._get_reference_member(getattr(nf, "reference_member_id", None)).transformation_matrix.T @ nf.force
+                f_l = parent.transformation_matrix @ f_g
+                lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
+        
+        for nm in self.loads.nodal_moments:
+            if nm.node_id in node_to_x:
+                x = node_to_x[nm.node_id]
+                m_g = nm.moment if getattr(nm, "coords", "global") == "global" else self._get_reference_member(getattr(nm, "reference_member_id", None)).transformation_matrix.T @ nm.moment
+                m_l = parent.transformation_matrix @ m_g
+                lc.add_moment(Moment(x=x, moment=m_l))
+        
+        # Add loads from member-level point forces/moments
+        for mpf in self.loads.member_point_forces:
+            seg_id = mpf.member_id
+            if seg_id not in self._member_segment_parent:
+                continue
+            if self._member_segment_parent[seg_id] != member_id:
+                continue
+            x0 = float(self._member_segment_offset[seg_id])
+            x = x0 + (mpf.position * parent.length if mpf.position_type == "relative" else mpf.position)
+            f_l = parent.transformation_matrix @ mpf.force if mpf.coords == "global" else mpf.force
+            lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
+        
+        for mpm in getattr(self.loads, "member_point_moments", []):
+            seg_id = mpm.member_id
+            if seg_id not in self._member_segment_parent:
+                continue
+            if self._member_segment_parent[seg_id] != member_id:
+                continue
+            x0 = float(self._member_segment_offset[seg_id])
+            x = x0 + (mpm.position * parent.length if mpm.position_type == "relative" else mpm.position)
+            m_l = parent.transformation_matrix @ mpm.moment if mpm.coords == "global" else mpm.moment
+            lc.add_moment(Moment(x=x, moment=m_l))
+        
+        # Add distributed member loads
+        for mdf in self.loads.member_distributed_forces:
+            seg_id = mdf.member_id
+            if seg_id not in self._member_segment_parent:
+                continue
+            if self._member_segment_parent[seg_id] != member_id:
+                continue
+            x0 = float(self._member_segment_offset[seg_id])
+            s_x = x0 + float(mdf.start_position)
+            e_x = x0 + float(mdf.end_position)
+            s_f_l = parent.transformation_matrix @ mdf.start_force if mdf.coords == "global" else mdf.start_force
+            e_f_l = parent.transformation_matrix @ mdf.end_force if mdf.coords == "global" else mdf.end_force
+            lc.add_distributed_force(DistributedForce(np.array([s_x, 0, 0]), np.array([e_x, 0, 0]), s_f_l, e_f_l))
+        
+        # Apply reactions as boundary loads for non-fixed end nodes
+        # Start node: already fixed (111111 support), don't add load
+        # End node: apply negative end_f as load (reaction equilibrium)
+        start_nid = parent.start_node_id
+        end_nid = parent.end_node_id
+        
+        if end_nid not in fixed_node_ids:
+            # Apply end forces and moments as negative (equilibrium)
+            lc.add_point_force(PointForce(point=np.array([parent.length, 0, 0]), force=-end_f[0:3]))
+            if any(abs(end_f[3:6]) > 1e-10):
+                lc.add_moment(Moment(x=parent.length, moment=-end_f[3:6]))
+        
+        # Check intermediate nodes for reactions and apply as loads
+        for x, nid in chain:
+            if x <= 1e-9 or x >= parent.length - 1e-9:
+                continue  # Skip start/end nodes already handled
+            if nid in self._reactions:
+                rxn = self._reactions[nid]
+                f_g = rxn[0:3]
+                m_g = rxn[3:6]
+                f_l = parent.transformation_matrix @ f_g
+                m_l = parent.transformation_matrix @ m_g
+                if any(abs(f_l) > 1e-10):
+                    lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=-f_l))
+                if any(abs(m_l) > 1e-10):
+                    lc.add_moment(Moment(x=x, moment=-m_l))
+        
+        return LoadedBeam(beam, lc)
+
     def plot(self, **kwargs):
         from ..viz.frame_plots import plot_frame
         plot_frame(self, **kwargs)

@@ -262,6 +262,71 @@ def run_case(
     loaded = LoadedFrame(frame, loads)
     _print_reactions(loaded)
 
+    # Extract P1 (first vertical post) as a loaded beam and analyze it
+    print("\n" + "=" * 70)
+    print("EXTRACTED BEAM ANALYSIS: Post P1")
+    print("=" * 70)
+    try:
+        loaded_beam = loaded.to_loaded_beam("P1")
+        print(f"Extracted P1 as LoadedBeam (L={loaded_beam.beam.L:.3f} m)")
+        print(f"Loads: {loaded_beam.loads}")
+        
+        # Analyze deflection at midpoint and tip
+        mid_x = loaded_beam.beam.L / 2.0
+        tip_x = loaded_beam.beam.L
+        
+        # Get deflections from loaded beam analysis
+        uy_result = loaded_beam.deflection("y")
+        uz_result = loaded_beam.deflection("z")
+        
+        print(f"\nDeflections (1D beam analysis):")
+        print(f"  Midspan (y): {uy_result.at(mid_x)*1000:.3f} mm")
+        print(f"  Tip (y): {uy_result.at(tip_x)*1000:.3f} mm")
+        print(f"  Midspan (z): {uz_result.at(mid_x)*1000:.3f} mm")
+        print(f"  Tip (z): {uz_result.at(tip_x)*1000:.3f} mm")
+        
+        # Get bending moments
+        by_result = loaded_beam.bending("y")
+        bz_result = loaded_beam.bending("z")
+        print(f"\nBending Moments (1D beam analysis):")
+        print(f"  Midspan (My): {by_result.action.at(mid_x)/1e6:.3f} MNm")
+        print(f"  Tip (My): {by_result.action.at(tip_x)/1e6:.3f} MNm")
+        print(f"  Midspan (Mz): {bz_result.action.at(mid_x)/1e6:.3f} MNm")
+        print(f"  Tip (Mz): {bz_result.action.at(tip_x)/1e6:.3f} MNm")
+        
+        # Get shear forces
+        sy_result = loaded_beam.shear("y")
+        sz_result = loaded_beam.shear("z")
+        print(f"\nShear Forces (1D beam analysis):")
+        print(f"  Start (Vy): {sy_result.action.at(1e-3)/1e3:.3f} kN")
+        print(f"  Start (Vz): {sz_result.action.at(1e-3)/1e3:.3f} kN")
+        
+        # Compare with frame member analysis (use bundled segments if they exist)
+        seg_ids = loaded._member_bundle.get("P1", ["P1"])
+        if len(seg_ids) > 0:
+            print(f"\nFrame Member (P1) segments: {seg_ids}")
+            for seg_id in seg_ids:
+                seg_res = loaded.get_member_results(seg_id)
+                print(f"  {seg_id}: Max My = {seg_res.bending_y.abs_max/1e6:.3f} MNm, Max Mz = {seg_res.bending_z.abs_max/1e6:.3f} MNm")
+        
+        # Run AISC Chapter F check on the extracted beam
+        print(f"\nRunning AISC Chapter F Check:")
+        try:
+            check_result = loaded_beam.check_aisc_chapter_f(length_unit="m", force_unit="N")
+            # Print summary of check results
+            print(f"  Overall Pass: {all(b.utilisation < 1.0 for b in check_result.bending) and check_result.shear.pass_}")
+            for bending in check_result.bending:
+                max_util = max((s.utilisation for s in bending.segments), default=0.0)
+                print(f"  {bending.axis} axis utilization: {max_util:.3f}")
+            print(f"  Shear utilization: {check_result.shear.utilisation:.3f} (V_max = {check_result.shear.V_max:.2f}, Capacity = {check_result.shear.capacity:.2f})")
+        except Exception as check_err:
+            print(f"  Check error: {check_err}")
+        
+    except Exception as e:
+        print(f"Warning: Could not extract beam analysis: {e}")
+        import traceback
+        traceback.print_exc()
+
     # Make plotting robust/legible for both cases
     scale = _auto_deflection_scale_factor(loaded)
     vm_min, vm_max = _estimate_von_mises_range_pa(loaded)
@@ -283,7 +348,7 @@ def run_case(
         save_path=str(output_dir / "von_mises.svg"),
     )
 
-    print(f"Plot scale: {scale:.2f}x (max disp = {_max_translation_displacement_m(loaded)*1000:.2f} mm)")
+    print(f"\nPlot scale: {scale:.2f}x (max disp = {_max_translation_displacement_m(loaded)*1000:.2f} mm)")
     print(f"Max |Ux| = {_max_abs_component_displacement_m(loaded, 0)*1000:.3f} mm")
     print(f"Von Mises range (Pa): min={vm_min:.3g}, max={vm_max:.3g}")
     print(f"Saved plots to: {output_dir}")

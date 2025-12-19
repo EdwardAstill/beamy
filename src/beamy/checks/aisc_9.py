@@ -231,7 +231,7 @@ def _shear_checks(beam: Beam1D, loaded: Any, dims_info: Dict[str, Any], stiffene
         cv = 190.0 / ((h/tw) * math.sqrt(Fy))
         fv = cv * 0.40 * Fy
     cap = fv * h * tw if (h and tw) else 0.0
-    return ShearResult(vmax, cap, cap >= vmax, fv=fv, slenderness_h_over_tw=(h/tw if (h and tw) else None))
+    return ShearResult(vmax, cap, cap >= vmax, Fv=fv, slenderness_h_over_tw=(h/tw if (h and tw) else None))
 
 # -----------------------------------------------------------------------------
 # 3. Main Interface & Unit Conversion
