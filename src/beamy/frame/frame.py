@@ -4,23 +4,20 @@ from typing import List, Dict, Set, Tuple, Optional
 import numpy as np
 from .node import Node
 from .member import Member
-from .mpc import MPC
 
 @dataclass
 class Frame:
     """A collection of nodes and members forming a 3D structural system."""
     members: List[Member]
-    mpcs: List[MPC] = field(default_factory=list)
     nodes: Dict[str, Node] = field(init=False, default_factory=dict)
     
     def __post_init__(self) -> None:
         raise NotImplementedError("Use Frame.from_nodes_and_members(nodes, members)")
     
     @classmethod
-    def from_nodes_and_members(cls, nodes: List[Node], members: List[Member], mpcs: Optional[List[MPC]] = None) -> Frame:
+    def from_nodes_and_members(cls, nodes: List[Node], members: List[Member]) -> Frame:
         frame = cls.__new__(cls)
         frame.members = members
-        frame.mpcs = mpcs or []
         frame.nodes = {}
         for n in nodes:
             if n.id in frame.nodes: raise ValueError(f"Duplicate node ID: {n.id}")

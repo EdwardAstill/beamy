@@ -18,7 +18,7 @@ This is intended to be the common baseline for:
 Add an enum/string to represent the chosen analysis track:
 
 - `GENERIC_LINEAR` (current)
-- `ELASTIC_SECOND_ORDER` (common engine with user-selected imperfection + stiffness rules)
+- `SECOND_ORDER_ELASTIC` (common engine with user-selected imperfection + stiffness rules)
 - `AISC360_DAM`
 - `EC3_GLOBAL_IMPERFECTIONS`
 - `AS4100_SECOND_ORDER`
@@ -29,9 +29,9 @@ Store it in the analysis results so checkers know what assumptions were used.
 
 Create `FrameAnalysisSettings` (dataclass) to drive all analysis runs:
 
-- `method`: one of the modes above
+- `analysis_method`: one of the modes above
 - `second_order`: bool (derived from method)
-- `imperfection`: `"none" | "notional_loads" | "initial_sway"`
+- `imperfection_model`: `"none" | "notional_loads" | "initial_sway"`
 - `notional_factor`: default `0.002` (wrapper can override)
 - `stiffness_rules`: `"none" | "aisc_dam" | "ec3" | "as4100"`
 - `max_iter`, `tol_u_rel`, `tol_u_abs`

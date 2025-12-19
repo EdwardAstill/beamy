@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, Optional, List, Set, TYPE_CHECKING
+from typing import Dict, Tuple, Optional, List, Set, TYPE_CHECKING, Literal
 import numpy as np
 
 if TYPE_CHECKING:
@@ -13,8 +13,145 @@ from ..core.loads import (
 )
 from .member import Member
 from .node import Node
-from .solver import analyze_frame_geometry, solve_displacements
+from .solver import (
+    assemble_global_stiffness,
+    solve_displacements,
+    recover_member_end_forces,
+    ElementStiffnessScales,
+    assemble_geometric_stiffness,
+)
 from .results import MemberResultsDirect
+
+
+AnalysisMethod = Literal[
+    "GENERIC_LINEAR",
+    "SECOND_ORDER_ELASTIC",
+    "AISC360_DAM",
+    "EC3_GLOBAL_IMPERFECTIONS",
+    "AS4100_SECOND_ORDER",
+]
+
+ImperfectionModel = Literal["none", "notional_loads", "initial_sway"]
+StiffnessRules = Literal["none", "aisc_dam", "ec3", "as4100"]
+NotionalPSource = Literal["input_based", "reactions_based"]
+
+
+@dataclass
+class FrameAnalysisSettings:
+    """Configuration for frame analysis.
+
+    This is intentionally a first-class object so we can thread analysis choices
+    (method, imperfections, stiffness rules, convergence controls) through the
+    solver without retrofitting.
+    """
+
+    analysis_method: AnalysisMethod = "GENERIC_LINEAR"
+    second_order: Optional[bool] = None
+
+    imperfection_model: ImperfectionModel = "none"
+    notional_factor: float = 0.002
+    notional_p_source: NotionalPSource = "input_based"
+    notional_axes: Tuple[Literal["x", "y"], ...] = ("x", "y")
+    notional_signs: Tuple[float, float] = (1.0, 1.0)  # (x_sign, y_sign)
+
+    stiffness_rules: StiffnessRules = "none"
+
+    # Stiffness scaling (elastic modifiers).
+    # If None, a default may be selected based on stiffness_rules.
+    bending_stiffness_factor: Optional[float] = None  # scales Iy and Iz
+    torsion_stiffness_factor: float = 1.0  # scales J
+    axial_stiffness_factor: float = 1.0  # scales A
+
+    # Iteration controls (used by nonlinear solvers; harmless for linear)
+    max_iter: int = 25
+    tol_u_rel: float = 1e-6
+    tol_u_abs: float = 1e-12
+    n_steps: int = 1
+    relaxation_omega: float = 1.0
+
+    # Existing nonlinear behavior
+    cable_tension_only: bool = True
+
+    def __post_init__(self) -> None:
+        if self.second_order is None:
+            self.second_order = self.analysis_method in (
+                "SECOND_ORDER_ELASTIC",
+                "AISC360_DAM",
+                "EC3_GLOBAL_IMPERFECTIONS",
+                "AS4100_SECOND_ORDER",
+            )
+        self.n_steps = max(int(self.n_steps), 1)
+        self.max_iter = max(int(self.max_iter), 1)
+        self.relaxation_omega = float(self.relaxation_omega)
+        if not (0.0 < self.relaxation_omega <= 1.0):
+            raise ValueError("relaxation_omega must be in (0, 1]")
+
+        if self.notional_p_source not in ("input_based", "reactions_based"):
+            raise ValueError("notional_p_source must be 'input_based' or 'reactions_based'")
+
+        ax_ok = set(self.notional_axes).issubset({"x", "y"})
+        if not ax_ok:
+            raise ValueError("notional_axes must be a subset of ('x','y')")
+
+        if len(self.notional_signs) != 2:
+            raise ValueError("notional_signs must be a 2-tuple (x_sign, y_sign)")
+
+        if self.bending_stiffness_factor is None:
+            if self.stiffness_rules == "aisc_dam":
+                self.bending_stiffness_factor = 0.8
+            else:
+                self.bending_stiffness_factor = 1.0
+
+        self.bending_stiffness_factor = float(self.bending_stiffness_factor)
+        self.torsion_stiffness_factor = float(self.torsion_stiffness_factor)
+        self.axial_stiffness_factor = float(self.axial_stiffness_factor)
+
+        if self.bending_stiffness_factor <= 0.0:
+            raise ValueError("bending_stiffness_factor must be > 0")
+        if self.torsion_stiffness_factor <= 0.0:
+            raise ValueError("torsion_stiffness_factor must be > 0")
+        if self.axial_stiffness_factor <= 0.0:
+            raise ValueError("axial_stiffness_factor must be > 0")
+
+
+@dataclass
+class StabilizationReport:
+    """Records numerical stabilization constraints added by the solver.
+
+    These constraints are NOT physical supports and must not be interpreted as
+    bracing/restraint for design checks.
+    """
+
+    kind: str
+    added_dofs: List[int]
+    node_ids: List[str]
+    dof_names: List[str]
+
+    @property
+    def used(self) -> bool:
+        return bool(self.added_dofs)
+
+
+@dataclass
+class FrameAnalysisResult:
+    """Primary output container for frame analysis + checker-facing metadata."""
+
+    nodal_displacements: Dict[str, np.ndarray]
+    reactions: Dict[str, np.ndarray]
+    member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]]
+
+    # Metadata
+    settings: FrameAnalysisSettings
+    converged: bool
+    iterations: int
+    design_grade_ok: bool
+    design_grade_notes: List[str]
+    warnings: List[str]
+    stabilization: StabilizationReport
+
+    # Low-level info (useful for debugging)
+    fixed_dofs_physical: List[int]
+    fixed_dofs_total: List[int]
 
 
 def _collect_fixed_dofs(frame: Frame, node_to_idx: Dict[str, int]) -> tuple[List[int], Set[str]]:
@@ -54,15 +191,18 @@ def _collect_fixed_dofs(frame: Frame, node_to_idx: Dict[str, int]) -> tuple[List
     return fixed_dofs, constrained_nodes
 
 
-def _auto_fix_rotations_for_truss_only_nodes(frame: Frame, node_to_idx: Dict[str, int], fixed_dofs: List[int]) -> List[int]:
-    """
-    Frame DOFs include rotations at each node. For truss/cable-only nodes, rotations are
-    physically irrelevant and have no stiffness contribution, which can make K singular.
+def _truss_only_rotation_stabilization(
+    frame: Frame, node_to_idx: Dict[str, int], fixed_dofs: List[int]
+) -> StabilizationReport:
+    """Return stabilization constraints needed to avoid singular K.
 
-    To keep the linear system solvable, automatically fix RX/RY/RZ at nodes that are not
-    connected to any beam element.
+    For truss/cable-only nodes, rotational DOFs can be unconstrained and have no stiffness.
+    We fix RX/RY/RZ at those nodes as a numerical stabilizer.
     """
     fixed_set = set(fixed_dofs)
+    added: List[int] = []
+    nodes: List[str] = []
+
     for nid, node in frame.nodes.items():
         has_beam = False
         for mid in node.connected_members:
@@ -70,22 +210,37 @@ def _auto_fix_rotations_for_truss_only_nodes(frame: Frame, node_to_idx: Dict[str
             if m.element_type == "beam":
                 has_beam = True
                 break
-        if not has_beam:
-            base = node_to_idx[nid] * 6
-            fixed_set.add(base + 3)
-            fixed_set.add(base + 4)
-            fixed_set.add(base + 5)
-    return sorted(fixed_set)
+        if has_beam:
+            continue
+
+        base = node_to_idx[nid] * 6
+        candidate = [base + 3, base + 4, base + 5]
+        newly = [d for d in candidate if d not in fixed_set]
+        if newly:
+            fixed_set.update(newly)
+            added.extend(newly)
+            nodes.append(nid)
+
+    return StabilizationReport(
+        kind="truss_only_rotations",
+        added_dofs=sorted(added),
+        node_ids=sorted(set(nodes)),
+        dof_names=["RX", "RY", "RZ"],
+    )
 
 @dataclass
 class LoadedFrame:
     """A frame with loads applied, ready for analysis."""
     frame: Frame
     loads: FrameLoadCase
+
+    settings: FrameAnalysisSettings = field(default_factory=FrameAnalysisSettings)
     
     _nodal_displacements: Dict[str, np.ndarray] = field(init=False, default_factory=dict)
     _reactions: Dict[str, np.ndarray] = field(init=False, default_factory=dict)
     _member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]] = field(init=False, default_factory=dict)
+
+    analysis_result: Optional[FrameAnalysisResult] = field(init=False, default=None)
 
     # Auto-splitting / bundling metadata
     original_frame: Frame = field(init=False)
@@ -367,7 +522,7 @@ class LoadedFrame:
             for _x, nid in self._member_nodes_along[ms.member_id]:
                 nodes_by_id[nid].support = self._merge_support(nodes_by_id[nid].support, ms.support)
 
-        expanded_frame = Frame.from_nodes_and_members(list(nodes_by_id.values()), new_members, mpcs=frame.mpcs)
+        expanded_frame = Frame.from_nodes_and_members(list(nodes_by_id.values()), new_members)
 
         # Rewrite loads
         expanded_loads = FrameLoadCase(name=loads.name)
@@ -437,75 +592,327 @@ class LoadedFrame:
     def _analyze_frame(self) -> None:
         node_ids = sorted(self.frame.nodes.keys())
         node_to_idx = {nid: i for i, nid in enumerate(node_ids)}
+
         F_global = self._build_load_vector(node_to_idx, 6 * len(node_ids))
-        
-        fixed_dofs, constrained_nodes = _collect_fixed_dofs(self.frame, node_to_idx)
-        fixed_dofs = _auto_fix_rotations_for_truss_only_nodes(self.frame, node_to_idx, fixed_dofs)
+
+        if self.settings.imperfection_model == "notional_loads":
+            F_global = F_global + self._build_notional_load_vector(node_to_idx, 6 * len(node_ids))
+
+        fixed_dofs_physical, constrained_nodes = _collect_fixed_dofs(self.frame, node_to_idx)
+        stabilization = _truss_only_rotation_stabilization(self.frame, node_to_idx, fixed_dofs_physical)
+        fixed_dofs_total = sorted(set(fixed_dofs_physical) | set(stabilization.added_dofs))
 
         cable_member_ids = [m.id for m in self.frame.members if m.element_type == "cable"]
         member_axial_scales: Dict[str, float] = {}
         for mid in cable_member_ids:
             member_axial_scales[mid] = 1.0
 
-        # Tension-only cable iteration:
-        # - Solve
-        # - If a cable is in compression, slacken it (reduce axial stiffness)
-        # - Repeat until cable set stops changing or max iterations reached
+        member_stiffness_scales: Dict[str, ElementStiffnessScales] = {}
+        for member in self.frame.members:
+            if member.element_type != "beam":
+                continue
+            member_stiffness_scales[member.id] = ElementStiffnessScales(
+                A=self.settings.axial_stiffness_factor,
+                Iy=self.settings.bending_stiffness_factor,
+                Iz=self.settings.bending_stiffness_factor,
+                J=self.settings.torsion_stiffness_factor,
+            )
+
+        # Iteration settings
         slack_scale = 1e-9
         tol_n = 1e-6
-        max_iter = 25
+        max_iter = int(self.settings.max_iter)
+        n_steps = int(self.settings.n_steps)
+        omega = float(self.settings.relaxation_omega)
 
-        d_global = None
-        K_global = None
-        m_mats = None
+        d_global: Optional[np.ndarray] = None
+        K_global: Optional[np.ndarray] = None
 
-        for _it in range(max_iter):
+        warnings: List[str] = []
+        design_grade_notes: List[str] = []
+
+        if self.settings.imperfection_model == "notional_loads":
+            design_grade_notes.append(
+                f"Notional loads enabled (factor={self.settings.notional_factor}, p_source={self.settings.notional_p_source})"
+            )
+
+        if (
+            abs(float(self.settings.bending_stiffness_factor) - 1.0) > 1e-12
+            or abs(float(self.settings.axial_stiffness_factor) - 1.0) > 1e-12
+            or abs(float(self.settings.torsion_stiffness_factor) - 1.0) > 1e-12
+        ):
+            design_grade_notes.append(
+                "Element stiffness scaling enabled "
+                f"(A={self.settings.axial_stiffness_factor}, Iy/Iz={self.settings.bending_stiffness_factor}, J={self.settings.torsion_stiffness_factor})"
+            )
+
+        if self.settings.second_order:
+            design_grade_notes.append(
+                f"Second-order analysis enabled (method={self.settings.analysis_method}, n_steps={n_steps}, omega={omega})"
+            )
+
+        def _assemble_global_stiffness() -> tuple[np.ndarray, dict]:
             if cable_member_ids:
-                K_global, m_mats = analyze_frame_geometry(self.frame, node_to_idx, member_axial_scales=member_axial_scales)
-            else:
-                K_global, m_mats = analyze_frame_geometry(self.frame, node_to_idx)
+                return assemble_global_stiffness(
+                    self.frame,
+                    node_to_idx,
+                    member_axial_scales=member_axial_scales,
+                    member_stiffness_scales=member_stiffness_scales,
+                )
+            return assemble_global_stiffness(
+                self.frame,
+                node_to_idx,
+                member_stiffness_scales=member_stiffness_scales,
+            )
 
-            d_global = solve_displacements(K_global, F_global, fixed_dofs)
+        def _solve_tangent(K: np.ndarray, Kg: np.ndarray, F: np.ndarray, fixed_dofs: List[int]) -> np.ndarray:
+            return solve_displacements(K + Kg, F, fixed_dofs)
 
-            # Build per-node displacements for force recovery
-            nodal_displacements: Dict[str, np.ndarray] = {}
-            for nid in node_ids:
-                nodal_displacements[nid] = d_global[node_to_idx[nid]*6 : node_to_idx[nid]*6 + 6]
+        def _second_order_solve(
+            F_step: np.ndarray,
+            member_end_forces_seed: Optional[Dict[str, Tuple[np.ndarray, np.ndarray]]],
+            d_seed: Optional[np.ndarray],
+        ) -> tuple[np.ndarray, dict, Dict[str, np.ndarray], Dict[str, Tuple[np.ndarray, np.ndarray]], bool, int]:
+            """Inner second-order solve (fixed cable state).
 
-            member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
-            for member in self.frame.members:
-                d_m_g = np.concatenate([nodal_displacements[member.start_node_id], nodal_displacements[member.end_node_id]])
-                k_l, T = m_mats[member.id]
-                f_m_l = k_l @ (T @ d_m_g)
-                member_end_forces[member.id] = (f_m_l[0:6], f_m_l[6:12])
+            Returns:
+                (d_global, m_mats, nodal_displacements, member_end_forces, converged, iters)
+            """
 
-            if not cable_member_ids:
-                self._nodal_displacements = nodal_displacements
-                self._member_end_forces = member_end_forces
-                break
+            last_d = d_seed
+            last_member_end_forces = member_end_forces_seed
 
-            # Update cable activity
-            changed = False
-            for mid in cable_member_ids:
-                start_f, _end_f = member_end_forces[mid]
-                # Local axial force convention: tension => -startFx > 0
-                n_axial = -float(start_f[0])
-                desired = 1.0 if n_axial >= -tol_n else slack_scale
-                if float(member_axial_scales[mid]) != float(desired):
-                    member_axial_scales[mid] = float(desired)
-                    changed = True
+            for it in range(max_iter):
+                K_lin, mats = _assemble_global_stiffness()
 
-            if not changed:
-                self._nodal_displacements = nodal_displacements
-                self._member_end_forces = member_end_forces
-                break
+                if last_member_end_forces is None:
+                    Kg = np.zeros_like(K_lin)
+                else:
+                    Kg = assemble_geometric_stiffness(
+                        self.frame,
+                        node_to_idx,
+                        last_member_end_forces,
+                        member_matrices=mats,
+                    )
 
-        if d_global is None or K_global is None:
+                d_new = _solve_tangent(K_lin, Kg, F_step, fixed_dofs_total)
+
+                if last_d is not None and abs(omega - 1.0) > 1e-12:
+                    d_new = (1.0 - omega) * last_d + omega * d_new
+
+                nodal_displacements, member_end_forces = recover_member_end_forces(
+                    self.frame,
+                    node_to_idx,
+                    d_new,
+                    mats,
+                )
+
+                if last_d is not None:
+                    du = float(np.linalg.norm(d_new - last_d))
+                    un = float(np.linalg.norm(d_new))
+                    if du <= max(float(self.settings.tol_u_abs), float(self.settings.tol_u_rel) * max(un, 1e-12)):
+                        return d_new, mats, nodal_displacements, member_end_forces, True, it + 1
+
+                last_d = d_new
+                last_member_end_forces = member_end_forces
+
+            return last_d if last_d is not None else np.zeros(6 * len(node_ids)), mats, nodal_displacements, member_end_forces, False, max_iter
+
+        converged = True
+        iterations = 0
+
+        last_member_end_forces: Optional[Dict[str, Tuple[np.ndarray, np.ndarray]]] = None
+        last_d: Optional[np.ndarray] = None
+
+        # Load stepping (continuation) for second-order robustness.
+        for step in range(1, max(n_steps, 1) + 1):
+            lam = float(step) / float(max(n_steps, 1))
+            F_step = F_global * lam
+
+            # Outer loop: cable tension-only active set (if enabled)
+            for cable_it in range(max_iter):
+                if self.settings.second_order:
+                    d_step, mats, nodal_displacements, member_end_forces, ok, iters = _second_order_solve(
+                        F_step,
+                        member_end_forces_seed=last_member_end_forces,
+                        d_seed=last_d,
+                    )
+                    iterations += int(iters)
+                    if not ok:
+                        converged = False
+                        warnings.append(
+                            f"Second-order iteration did not converge at load step {step}/{n_steps} (cable_outer={cable_it + 1})"
+                        )
+                else:
+                    K_lin, mats = _assemble_global_stiffness()
+                    d_step = solve_displacements(K_lin, F_step, fixed_dofs_total)
+                    nodal_displacements, member_end_forces = recover_member_end_forces(
+                        self.frame,
+                        node_to_idx,
+                        d_step,
+                        mats,
+                    )
+                    iterations += 1
+
+                # Save for next iteration/step
+                d_global = d_step
+                last_d = d_step
+                last_member_end_forces = member_end_forces
+
+                if not self.settings.cable_tension_only or not cable_member_ids:
+                    break
+
+                # Update cable activity
+                changed = False
+                for mid in cable_member_ids:
+                    start_f, _end_f = member_end_forces[mid]
+                    n_axial = -float(start_f[0])
+                    desired = 1.0 if n_axial >= -tol_n else slack_scale
+                    if float(member_axial_scales[mid]) != float(desired):
+                        member_axial_scales[mid] = float(desired)
+                        changed = True
+
+                if not changed:
+                    break
+
+                if cable_it == max_iter - 1:
+                    converged = False
+                    warnings.append(f"Cable tension-only iteration hit max_iter at load step {step}/{n_steps}")
+
+            # Update final state at this load step
+            self._nodal_displacements = nodal_displacements
+            self._member_end_forces = member_end_forces
+
+        # Record that stepping/damping were used.
+        if self.settings.second_order and n_steps > 1:
+            design_grade_notes.append(f"Load stepping enabled (n_steps={n_steps})")
+        if self.settings.second_order and abs(omega - 1.0) > 1e-12:
+            design_grade_notes.append(f"Under-relaxation enabled (omega={omega})")
+
+        if d_global is None:
             raise RuntimeError("Frame analysis did not run")
+
+        # Recompute reactions from the final linear stiffness (material stiffness only).
+        # For second-order, this is an approximation; reaction reporting is primarily for equilibrium checks.
+        if K_global is None:
+            K_global, _ = _assemble_global_stiffness()
 
         R_global = K_global @ d_global - F_global
         for nid in constrained_nodes:
             self._reactions[nid] = R_global[node_to_idx[nid]*6 : node_to_idx[nid]*6 + 6]
+
+        if stabilization.used:
+            design_grade_notes.append(
+                "Numerical stabilization constraints were added (truss/cable-only node rotations)"
+            )
+
+        design_grade_ok = bool(converged) and (not stabilization.used)
+
+        self.analysis_result = FrameAnalysisResult(
+            nodal_displacements=dict(self._nodal_displacements),
+            reactions=dict(self._reactions),
+            member_end_forces=dict(self._member_end_forces),
+            settings=self.settings,
+            converged=bool(converged),
+            iterations=int(iterations),
+            design_grade_ok=bool(design_grade_ok),
+            design_grade_notes=design_grade_notes,
+            warnings=warnings,
+            stabilization=stabilization,
+            fixed_dofs_physical=fixed_dofs_physical,
+            fixed_dofs_total=fixed_dofs_total,
+        )
+
+    def _build_notional_load_vector(self, node_to_idx: Dict[str, int], n_dofs: int) -> np.ndarray:
+        """Build the global notional load vector (imperfection equivalent).
+
+        Default behavior is deterministic and input-based: it uses applied vertical loads
+        (nodal forces + member loads lumped to nodes) to compute a gravity measure P, then
+        applies lateral notional loads H = alpha * P.
+        """
+
+        if self.settings.notional_p_source != "input_based":
+            # Reaction-based notional loads are intentionally not implemented yet.
+            # It must be explicit because it depends on supports/springs.
+            raise NotImplementedError("Reaction-based notional P source is not implemented")
+
+        P_by_node = self._compute_input_based_gravity_p_by_node(node_to_idx)
+
+        F = np.zeros(n_dofs)
+        alpha = float(self.settings.notional_factor)
+        sx, sy = float(self.settings.notional_signs[0]), float(self.settings.notional_signs[1])
+
+        for nid, P in P_by_node.items():
+            H = alpha * float(P)
+            base = node_to_idx[nid] * 6
+            if "x" in self.settings.notional_axes:
+                F[base + 0] += sx * H
+            if "y" in self.settings.notional_axes:
+                F[base + 1] += sy * H
+
+        return F
+
+    def _compute_input_based_gravity_p_by_node(self, node_to_idx: Dict[str, int]) -> Dict[str, float]:
+        """Compute a deterministic gravity-load measure P per node from applied loads.
+
+        Convention:
+            - Global Z is treated as "vertical".
+            - Downward vertical load is negative Fz.
+            - P is returned as a positive scalar, summing only downward contributions.
+
+        This intentionally avoids reactions so P is not sensitive to support stiffness.
+        """
+
+        def _downward_p_from_global_force(f_g: np.ndarray) -> float:
+            fz = float(f_g[2])
+            return max(0.0, -fz)
+
+        P: Dict[str, float] = {nid: 0.0 for nid in self.frame.nodes.keys()}
+
+        # 1) Direct nodal forces
+        for nf in self.loads.nodal_forces:
+            f_g = nf.force
+            if getattr(nf, "coords", "global") == "local":
+                m_ref = self._get_reference_member(getattr(nf, "reference_member_id", None))
+                f_g = m_ref.transformation_matrix.T @ nf.force
+            P[nf.node_id] += _downward_p_from_global_force(f_g)
+
+        # 2) Member point forces (distributed to end nodes like the solver load vector)
+        for mpf in self.loads.member_point_forces:
+            m = self.frame.get_member(mpf.member_id)
+            x = mpf.position * m.length if mpf.position_type == "relative" else mpf.position
+            f_g = m.transformation_matrix.T @ mpf.force if mpf.coords == "local" else mpf.force
+            p_here = _downward_p_from_global_force(f_g)
+            if p_here <= 0.0:
+                continue
+            N1, N2 = 1 - x / m.length, x / m.length
+            P[m.start_node_id] += N1 * p_here
+            P[m.end_node_id] += N2 * p_here
+
+        # 3) Member distributed forces (lump total vertical to end nodes)
+        for mdf in self.loads.member_distributed_forces:
+            m = self.frame.get_member(mdf.member_id)
+
+            # Convert to global if needed
+            s_f_g = m.transformation_matrix.T @ mdf.start_force if mdf.coords == "local" else mdf.start_force
+            e_f_g = m.transformation_matrix.T @ mdf.end_force if mdf.coords == "local" else mdf.end_force
+
+            # Total resultant (linearly varying): average * length
+            Lseg = float(mdf.end_position - mdf.start_position)
+            if Lseg <= 0.0:
+                continue
+            w_avg = 0.5 * (s_f_g + e_f_g)
+            F_tot = w_avg * Lseg
+            p_here = _downward_p_from_global_force(F_tot)
+            if p_here <= 0.0:
+                continue
+
+            # Simple deterministic lump: half to each end
+            P[m.start_node_id] += 0.5 * p_here
+            P[m.end_node_id] += 0.5 * p_here
+
+        # Prune zero entries (but keep determinism by returning only nodes with P>0)
+        return {nid: float(v) for nid, v in P.items() if float(v) > 0.0}
 
     def _build_load_vector(self, node_to_idx: Dict[str, int], n_dofs: int) -> np.ndarray:
         F = np.zeros(n_dofs)
@@ -920,10 +1327,6 @@ class LoadedFrame:
         beam = Beam1D(L=parent.length, material=parent.material, section=parent.section, supports=supports)
         lc = LoadCase(name=f"Member {member_id} extracted")
 
-        # Supported locations in the frame (avoid double-counting by not adding reaction/boundary loads there)
-        start_supported = (chain[0][1] if chain else parent.start_node_id) in supported_node_ids
-        end_supported = (chain[-1][1] if chain else parent.end_node_id) in supported_node_ids
-        
         # Find which nodes have fixed supports in the original frame
         fixed_node_ids = set()
         for nid, node in self.original_frame.nodes.items():
@@ -994,6 +1397,8 @@ class LoadedFrame:
         # Apply boundary loads at the member end only if that end is NOT modeled as a support.
         # (Otherwise we'd be double-counting the restraint + the end forces.)
         end_nid = parent.end_node_id
+
+        end_supported = (chain[-1][1] if chain else parent.end_node_id) in supported_node_ids
 
         if (not end_supported) and (end_nid not in fixed_node_ids):
             # Apply end forces and moments as negative (equilibrium)

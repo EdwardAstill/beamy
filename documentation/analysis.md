@@ -56,7 +56,7 @@ beamy will expose “analysis modes” as explicit, user-visible choices. Each m
 	- No P–Δ/P–δ.
 	- No required imperfections.
 
-- **ELASTIC_SECOND_ORDER**
+- **SECOND_ORDER_ELASTIC**
 	- Second-order elastic analysis via geometric stiffness and iteration.
 	- User chooses imperfection model (typically notional loads).
 	- User chooses stiffness modifiers (if any).

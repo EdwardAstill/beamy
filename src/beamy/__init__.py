@@ -11,7 +11,8 @@ from .beam1d.analysis import LoadedBeam
 from .frame.node import Node
 from .frame.member import Member
 from .frame.frame import Frame
-from .frame.analysis import LoadedFrame
+from .frame.analysis import LoadedFrame, FrameAnalysisSettings, FrameAnalysisResult, StabilizationReport
+from .frame.solver import ElementStiffnessScales
 from .frame.results import MemberResults
 
 from .viz import (
@@ -37,6 +38,8 @@ __all__ = [
     "LoadCase", "FrameLoadCase",
     "Beam1D", "LoadedBeam",
     "Node", "Member", "Frame", "LoadedFrame", "MemberResults",
+    "FrameAnalysisSettings", "FrameAnalysisResult", "StabilizationReport",
+    "ElementStiffnessScales",
     "plot_beam_diagram", "plot_analysis_results", "StressPlotter",
     "plot_section", "plot_supports", "plot_loads",
     "plot_frame", "plot_deflection", "plot_von_mises", "plot_member_diagrams",
