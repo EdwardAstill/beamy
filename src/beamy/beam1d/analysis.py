@@ -183,6 +183,26 @@ class LoadedBeam:
         from ..checks import aisc_9
         return self.check(aisc_9, length_unit=length_unit, force_unit=force_unit)
 
+    def check_aisc_chapter_e(
+        self,
+        length_unit,
+        force_unit,
+        *,
+        K: float = 1.0,
+        unbraced_positions: Any = None,
+        compression_sign: str = "negative",
+    ) -> Any:
+        from ..checks import aisc_9
+        return self.check(
+            aisc_9,
+            chapter="e",
+            length_unit=length_unit,
+            force_unit=force_unit,
+            K=K,
+            unbraced_positions=unbraced_positions,
+            compression_sign=compression_sign,
+        )
+
     def plot(self, **kwargs):
         from ..viz.beam_plots import plot_beam_diagram
         plot_beam_diagram(self, **kwargs)

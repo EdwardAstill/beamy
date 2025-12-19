@@ -1,0 +1,601 @@
+
+=== TF - Elevated (elevated) ===
+Members: 14
+
+Member BASE_C1 (type=beam)
+  Length: 1.800 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N1, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.475 m, node=N8, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+      x=1.325 m, node=N12, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+      x=1.800 m, node=N5, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=0.475 m, type=111111, reactions: (none)
+      x=1.325 m, type=111111, reactions: (none)
+      x=1.800 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_C2 (type=beam)
+  Length: 1.800 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N2, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.475 m, node=N10, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+      x=1.325 m, node=N14, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+      x=1.800 m, node=N6, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=0.475 m, type=111111, reactions: (none)
+      x=1.325 m, type=111111, reactions: (none)
+      x=1.800 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_L_1 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N0, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.750 m, node=N1, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=0.750 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_L_2 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N1, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=1.000 m, node=N2, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=1.000 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_L_3 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N2, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.750 m, node=N3, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=0.750 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_R_1 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N4, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.750 m, node=N5, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=0.750 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_R_2 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N5, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=1.000 m, node=N6, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=1.000 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BASE_R_3 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N6, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.750 m, node=N7, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: (none)
+      x=0.750 m, type=111111, reactions: (none)
+  Loads:
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member BR1 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=2337.554
+  Loads:
+    PointForce at x=1.000 m: F=[-2337.554, -0.000, -0.000] N
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Compression (Chap E): 0.003
+    Governing: 0.003
+
+Member BR2 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=2337.554
+  Loads:
+    PointForce at x=1.000 m: F=[-2337.554, 0.000, -0.000] N
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Compression (Chap E): 0.003
+    Governing: 0.003
+
+Member P1 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N8, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=6557.985, My=-557.429
+  Loads:
+    PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
+    PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=1.111 m: M=[0.000, 557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.014
+    Compression (Chap E): 0.010
+    Governing: 0.014
+
+Member P2 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N10, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=6557.985, My=557.429
+  Loads:
+    PointForce at x=1.775 m: F=[-0.000, -0.000, 0.000] N
+    PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=1.111 m: M=[0.000, -557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.014
+    Shear: 0.000
+    Compression (Chap E): 0.010
+    Governing: 0.014
+
+Member P3 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N12, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=6557.985, My=-557.429
+  Loads:
+    PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
+    PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=1.111 m: M=[0.000, 557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.014
+    Compression (Chap E): 0.010
+    Governing: 0.014
+
+Member P4 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N14, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=6557.985, My=557.429
+  Loads:
+    PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
+    PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=1.111 m: M=[0.000, -557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.000
+    Bending[2]: 0.014
+    Compression (Chap E): 0.010
+    Governing: 0.014
+
+=== TF - Lifted (lifted) ===
+Members: 14
+
+Member BASE_C1 (type=beam)
+  Length: 1.800 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=-87.797, Fy=587.559, Fz=-17998.647, Mx=-11.122, My=-42565.205, Mz=-2045.956
+  Loads:
+    PointForce at x=1.800 m: F=[87.797, 2860.843, 17998.647] N
+    Moment at x=1.800 m: M=[-20.834, 3346.627, 1.964] Nm
+    Moment at x=0.000 m: M=[31.956, 6821.013, -1.964] Nm
+    DistForce from x=0.000 to 0.475 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+    DistForce from x=0.475 to 1.325 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+    DistForce from x=1.325 to 1.800 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.070
+    Bending[2]: 0.570
+    Shear: 0.087
+    Governing: 0.570
+
+Member BASE_C2 (type=beam)
+  Length: 1.800 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=-4427.656, Fy=609.803, Fz=21854.866, Mx=-11.122, My=49506.400, Mz=-2005.917
+  Loads:
+    PointForce at x=1.800 m: F=[4427.656, 2838.599, -21854.866] N
+    Moment at x=1.800 m: M=[31.956, -6821.013, -1.964] Nm
+    Moment at x=0.000 m: M=[-20.834, -3346.627, 1.964] Nm
+    DistForce from x=0.000 to 0.475 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+    DistForce from x=0.475 to 1.325 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+    DistForce from x=1.325 to 1.800 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.070
+    Bending[2]: 0.736
+    Shear: 0.106
+    Governing: 0.736
+
+Member BASE_L_1 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.000 m, node=N0, type=110000, R(F)=[4515.453, 3856.219, -0.000] N, R(M)=[0.000, 0.000, -0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=-3856.219, Fy=2155.251, Fz=-4515.453, My=-6773.179, Mz=538.813
+  Loads:
+    PointForce at x=0.750 m: F=[3856.219, -718.417, 4515.453] N
+    Moment at x=0.750 m: M=[-0.000, 3386.590, 538.813] Nm
+    DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.007
+    Bending[2]: 0.108
+    Shear: 0.022
+    Governing: 0.108
+
+Member BASE_L_2 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=17998.647, Fy=1926.901, Fz=-87.797, Mx=3.927, My=6693.255, Mz=-55.824
+  Loads:
+    PointForce at x=1.000 m: F=[-17998.647, -11.122, 87.797] N
+    Moment at x=1.000 m: M=[-1.964, -3346.627, 517.979] Nm
+    Moment at x=0.000 m: M=[-1.964, -3434.424, 506.857] Nm
+    DistForce from x=0.000 to 1.000 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.006
+    Bending[2]: 0.052
+    Shear: 0.000
+    Compression (Chap E): 0.020
+    Governing: 0.052
+
+Member BASE_L_3 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fy=718.417, Mz=-538.813
+  Loads:
+    PointForce at x=0.750 m: F=[-0.000, 718.417, 0.000] N
+    Moment at x=0.750 m: M=[-0.000, 0.000, 0.000] Nm
+    Moment at x=0.000 m: M=[-0.000, 0.000, 538.813] Nm
+    DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.007
+    Bending[2]: 0.000
+    Shear: 0.000
+    Governing: 0.007
+
+Member BASE_R_1 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fy=2155.251, Mz=538.813
+  Loads:
+    PointForce at x=0.750 m: F=[-0.000, -718.417, -0.000] N
+    Moment at x=0.750 m: M=[-0.000, -0.000, 538.813] Nm
+    DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.007
+    Bending[2]: 0.000
+    Shear: 0.000
+    Governing: 0.007
+
+Member BASE_R_2 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=17998.647, Fy=1904.657, Fz=-87.797, Mx=3.927, My=-6868.848, Mz=-78.068
+  Loads:
+    PointForce at x=1.000 m: F=[-17998.647, 11.122, 87.797] N
+    Moment at x=1.000 m: M=[-1.964, 3434.424, 506.857] Nm
+    Moment at x=0.000 m: M=[-1.964, 3346.627, 517.979] Nm
+    DistForce from x=0.000 to 1.000 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.007
+    Bending[2]: 0.056
+    Shear: 0.000
+    Compression (Chap E): 0.020
+    Governing: 0.056
+
+Member BASE_R_3 (type=beam)
+  Length: 0.750 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.25x0.006
+    A=4.656000e-03, Iy=1.818907e-05, Iz=4.027787e-05, J=1.678929e-07, Sy=2.425210e-04, Sz=3.222230e-04, y_max=1.250000e-01, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      x=0.750 m, node=N7, type=110000, R(F)=[-4515.453, -3856.219, -0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=001111, reactions: My=3386.590, Mz=-1077.626
+      x=0.750 m, type=110000, reactions: Fy=1436.834
+  Loads:
+    Moment at x=0.000 m: M=[-0.000, -3386.590, 538.813] Nm
+    DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
+  Utilisation:
+    Bending[1]: 0.015
+    Bending[2]: 0.000
+    Governing: 0.015
+
+Member BR1 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=-24375.469, Fy=1479.694, Fz=-2173.719, My=-2173.719, Mz=1479.694
+  Loads:
+    PointForce at x=1.000 m: F=[24375.469, -1479.694, 2173.719] N
+    Moment at x=1.000 m: M=[-0.000, -0.000, -0.000] Nm
+    Moment at x=0.000 m: M=[0.000, -0.000, -0.000] Nm
+  Utilisation:
+    Bending[1]: 0.041
+    Bending[2]: 0.053
+    Shear: 0.018
+    Governing: 0.053
+
+Member BR2 (type=beam)
+  Length: 1.000 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=-24375.469, Fy=-1479.694, Fz=-2173.719, My=-2173.719, Mz=-1479.694
+  Loads:
+    PointForce at x=1.000 m: F=[24375.469, 1479.694, 2173.719] N
+    Moment at x=1.000 m: M=[0.000, 0.000, -0.000] Nm
+    Moment at x=0.000 m: M=[-0.000, 0.000, -0.000] Nm
+  Utilisation:
+    Bending[1]: 0.041
+    Bending[2]: 0.053
+    Shear: 0.018
+    Governing: 0.053
+
+Member P1 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=17245.593, Fy=3785.195, Fz=4453.170, My=7312.641, Mz=12785.325
+  Loads:
+    PointForce at x=1.775 m: F=[-10687.608, -3785.195, -4453.170] N
+    PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=0.000 m: M=[-0.000, 34.308, -6066.605] Nm
+    Moment at x=0.875 m: M=[0.000, 557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.185
+    Bending[2]: 0.191
+    Shear: 0.036
+    Compression (Chap E): 0.027
+    Governing: 0.191
+
+Member P2 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=17224.196, Fy=3777.616, Fz=-4444.255, My=-7312.641, Mz=14062.654
+  Loads:
+    PointForce at x=1.775 m: F=[-10666.211, -3777.616, 4444.255] N
+    PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=0.000 m: M=[0.000, -18.483, -7357.385] Nm
+    Moment at x=0.875 m: M=[0.000, -557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.185
+    Bending[2]: 0.191
+    Shear: 0.036
+    Compression (Chap E): 0.027
+    Governing: 0.191
+
+Member P3 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=17224.196, Fy=-3777.616, Fz=4444.255, My=7312.641, Mz=-14062.654
+  Loads:
+    PointForce at x=1.775 m: F=[-10666.211, 3777.616, -4444.255] N
+    PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=0.000 m: M=[0.000, 18.483, 7357.385] Nm
+    Moment at x=0.875 m: M=[0.000, 557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.185
+    Bending[2]: 0.191
+    Shear: 0.036
+    Compression (Chap E): 0.027
+    Governing: 0.191
+
+Member P4 (type=beam)
+  Length: 1.775 m
+  Material: Steel, E=2.000e+11 Pa, G=8.000e+10 Pa, Fy=3.450e+08 Pa
+  Section: RHS 0.15x0.15x0.006
+    A=3.456000e-03, Iy=1.196467e-05, Iz=1.196467e-05, J=6.762514e-08, Sy=1.595290e-04, Sz=1.595290e-04, y_max=7.500000e-02, z_max=7.500000e-02
+    dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
+  Supports:
+    Frame supports (node constraints):
+      (none)
+    LoadedBeam supports (1D extraction):
+      x=0.000 m, type=111111, reactions: Fx=17245.593, Fy=-3785.195, Fz=-4453.170, My=-7312.641, Mz=-12785.325
+  Loads:
+    PointForce at x=1.775 m: F=[-10687.608, 3785.195, 4453.170] N
+    PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
+    Moment at x=0.000 m: M=[-0.000, -34.308, 6066.605] Nm
+    Moment at x=0.875 m: M=[0.000, -557.429, 0.000] Nm
+  Utilisation:
+    Bending[1]: 0.185
+    Bending[2]: 0.191
+    Shear: 0.036
+    Compression (Chap E): 0.027
+    Governing: 0.191

@@ -27,6 +27,7 @@ from sectiony.library import rhs, chs
 
 from beamy import Material
 from beamy.frame import Frame, FrameBuilder, FrameLoadCase, LoadedFrame
+from beamy.core.support import Support
 
 
 @dataclass(frozen=True)
@@ -266,6 +267,152 @@ def run_case(
     loaded = LoadedFrame(frame, loads)
     _print_reactions(loaded)
 
+    # === Write per-member LoadedBeam information to tf/outputs/members.txt ===
+    def _fmt_vec(v: np.ndarray) -> str:
+        return f"[{float(v[0]):.3f}, {float(v[1]):.3f}, {float(v[2]):.3f}]"
+
+    def _write_members_info(members_file: Path, case_label: str, loaded_frame: LoadedFrame) -> None:
+        try:
+            beams = loaded_frame.to_loaded_beams()
+        except Exception as e:
+            print(f"Warning: could not build LoadedBeams for members: {e}")
+            return
+
+        with members_file.open("a", encoding="utf-8") as f:
+            f.write(f"\n=== {case_label} ===\n")
+            f.write(f"Members: {len(beams)}\n")
+            # Iterate deterministically
+            for mid in sorted(beams.keys()):
+                lb = beams[mid]
+                # Resolve original member for metadata
+                try:
+                    orig = loaded_frame.original_frame.get_member(mid)
+                except Exception:
+                    orig = loaded_frame.frame.get_member(mid)
+
+                # Header
+                f.write(f"\nMember {mid} (type={orig.element_type})\n")
+                f.write(f"  Length: {orig.length:.3f} m\n")
+                # Material
+                mat = lb.beam.material
+                f.write(f"  Material: {mat.name}, E={mat.E:.3e} Pa, G={mat.G:.3e} Pa, Fy={(mat.Fy or 0.0):.3e} Pa\n")
+                # Section
+                sec = lb.beam.section
+                f.write(f"  Section: {getattr(sec, 'name', 'unknown')}\n")
+                props = []
+                for k in ("A", "Iy", "Iz", "J", "Sy", "Sz", "y_max", "z_max"):
+                    v = getattr(sec, k, None)
+                    if v is not None:
+                        props.append(f"{k}={float(v):.6e}")
+                if props:
+                    f.write("    " + ", ".join(props) + "\n")
+                # Dimensions (if available)
+                dims = getattr(sec, "dimensions", None)
+                if isinstance(dims, dict) and dims:
+                    # Only print key dims to keep concise
+                    keys = [k for k in ("b", "h", "d", "t", "tw", "tf") if k in dims and dims[k] is not None]
+                    if keys:
+                        dim_str = ", ".join([f"{k}={float(dims[k]):.4f} m" for k in keys])
+                        f.write(f"    dims: {dim_str}\n")
+
+                # Supports from frame (node constraints) with reactions
+                f.write("  Supports:\n")
+                f.write("    Frame supports (node constraints):\n")
+                try:
+                    chain = loaded_frame._member_nodes_along.get(mid, [])
+                    any_frame_support = False
+                    for x, nid in chain:
+                        node = loaded_frame.frame.get_node(nid)
+                        supp = node.support
+                        if not supp:
+                            continue
+                        any_frame_support = True
+                        rxn = loaded_frame.reactions.get(nid, np.zeros(6))
+                        rf = rxn[:3]
+                        rm = rxn[3:6]
+                        f.write(
+                            f"      x={float(x):.3f} m, node={nid}, type={supp}, "
+                            + f"R(F)=[{rf[0]:.3f}, {rf[1]:.3f}, {rf[2]:.3f}] N, "
+                            + f"R(M)=[{rm[0]:.3f}, {rm[1]:.3f}, {rm[2]:.3f}] Nm\n"
+                        )
+                    if not any_frame_support:
+                        f.write("      (none)\n")
+                except Exception:
+                    pass
+
+                # LoadedBeam supports (1D extraction)
+                f.write("    LoadedBeam supports (1D extraction):\n")
+                lb_supports = [s for s in getattr(lb.beam, "supports", []) if isinstance(s, Support)]
+                if not lb_supports:
+                    f.write("      (none)\n")
+                else:
+                    for s in lb_supports:
+                        rxn = s.reactions
+                        nz = {k: float(v) for k, v in rxn.items() if abs(float(v)) > 1e-9}
+                        rxn_str = ", ".join([f"{k}={v:.3f}" for k, v in nz.items()]) if nz else "(none)"
+                        f.write(f"      x={s.x:.3f} m, type={s.type}, reactions: {rxn_str}\n")
+
+                # Loads
+                f.write("  Loads:\n")
+                # Point forces
+                if lb.loads.point_forces:
+                    for pf in lb.loads.point_forces:
+                        x = float(pf.point[0])
+                        f.write(f"    PointForce at x={x:.3f} m: F={_fmt_vec(pf.force)} N\n")
+                # Moments
+                if lb.loads.moments:
+                    for m in lb.loads.moments:
+                        f.write(f"    Moment at x={float(m.x):.3f} m: M={_fmt_vec(m.moment)} Nm\n")
+                # Distributed
+                if lb.loads.dist_forces:
+                    for df in lb.loads.dist_forces:
+                        xs = float(df.start_position[0])
+                        xe = float(df.end_position[0])
+                        f.write(
+                            "    DistForce from x="
+                            + f"{xs:.3f} to {xe:.3f} m: w_start={_fmt_vec(df.start_force)} N/m, "
+                            + f"w_end={_fmt_vec(df.end_force)} N/m\n"
+                        )
+
+                # AISC Chapter F utilisation
+                util_overall = 0.0
+                util_bend = []
+                util_shear = 0.0
+                util_comp_e = 0.0
+                try:
+                    check = lb.check_aisc_chapter_f(length_unit="m", force_unit="N")
+                    util_overall = float(check.utilisation)
+                    util_bend = [float(b.utilisation) for b in check.bending]
+                    util_shear = float(check.shear.utilisation)
+                except Exception:
+                    # Fallback to frame-derived utilisations
+                    try:
+                        util_map = loaded_frame.get_aisc_utilizations()
+                        util_overall = float(util_map.get(mid, 0.0))
+                    except Exception:
+                        util_overall = 0.0
+
+                f.write("  Utilisation:\n")
+                if util_bend:
+                    for i, u in enumerate(util_bend, start=1):
+                        f.write(f"    Bending[{i}]: {u:.3f}\n")
+                if util_shear:
+                    f.write(f"    Shear: {util_shear:.3f}\n")
+                # Optional: axial compression check per AISC Chapter E
+                try:
+                    check_e = lb.check_aisc_chapter_e(length_unit="m", force_unit="N")
+                    util_comp_e = float(check_e.utilisation)
+                except Exception:
+                    util_comp_e = 0.0
+                if util_comp_e > 1e-3:
+                    f.write(f"    Compression (Chap E): {util_comp_e:.3f}\n")
+                governing = max(util_overall, util_comp_e)
+                f.write(f"    Governing: {governing:.3f}\n")
+
+    members_file = output_dir.parent / "members.txt"
+    _ensure_dir(members_file.parent)
+    _write_members_info(members_file, f"{spec.name} ({support_mode})", loaded)
+
     # Extract P1 (first vertical post) as a loaded beam and analyze it
     print("\n" + "=" * 70)
     print("EXTRACTED BEAM ANALYSIS: Post P1")
@@ -385,6 +532,9 @@ if __name__ == "__main__":
     )
 
     outputs_root = Path("tf") / "outputs"
+    # Reset consolidated members report to avoid duplicate appends across runs
+    _ensure_dir(outputs_root)
+    (outputs_root / "members.txt").write_text("", encoding="utf-8")
     run_case(
         output_dir=outputs_root / "elevated",
         spec=elevated,

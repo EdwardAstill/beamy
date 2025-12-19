@@ -4,6 +4,8 @@ Beamy is a lightweight Python package for 1D beam analysis, capable of handling 
 
 **Note:** Beamy is unit-agnostic. Use consistent units throughout your analysis. See [Units](units.md) for details.
 
+This guide now covers both single-beam analysis and 3D frame analysis. Frames let you model connected members, joints, supports, trusses/cables, and loads across a structure.
+
 ## Quick Start
 
 Here is a complete example of setting up a simply supported beam with a point load.
@@ -237,4 +239,178 @@ sp.plot_stress_at(x_pos=2.5, stress_type="von_mises")
 ```
 
 For more details, see the [Beam Plotter](../reference/analysis/beam%20plotter.md) and [Section Plotter](../reference/analysis/section%20plotter.md) reference documentation.
+
+---
+
+## Frames
+
+Frames extend the same mechanics to assemblies of connected members in 3D. Each node has 6 DOFs `(Ux, Uy, Uz, Rx, Ry, Rz)`. Members connect at shared nodes and transfer forces/moments unless you add explicit end releases.
+
+Key modules:
+- Builder and core types in [src/beamy/frame/builder.py](src/beamy/frame/builder.py) and [src/beamy/frame/frame.py](src/beamy/frame/frame.py)
+- Member definition in [src/beamy/frame/member.py](src/beamy/frame/member.py)
+- Analysis and results in [src/beamy/frame/analysis.py](src/beamy/frame/analysis.py)
+- Plotting in [src/beamy/viz/frame_plots.py](src/beamy/viz/frame_plots.py)
+
+### Degrees of Freedom
+- 6 DOF per node: translations `(Ux, Uy, Uz)` and rotations `(Rx, Ry, Rz)`.
+- Supports constrain DOFs using 6-digit strings: `1` = fixed, `0` = free.
+    - Fixed/clamped: `"111111"`
+    - Pinned: `"111000"` (translations fixed, rotations free)
+    - Roller examples: `"011000"`, `"101000"`, `"110000"` depending on the free translation.
+
+### Nodes and Connectivity
+- Members connect when they share the same coordinate (within builder rounding tolerance).
+- If members cross without sharing a node at the intersection, they are not connected.
+- The analysis pipeline auto-inserts real nodes where you attach loads/supports along members and splits members into segments for the solver. See `LoadedFrame._expand_model_for_attachment_points()` in [src/beamy/frame/analysis.py](src/beamy/frame/analysis.py).
+
+Best practice:
+- Ensure any physical joint is represented by a shared node; split long members at connection points.
+- Use member end releases to model pinned connections, not by leaving node rotations unconstrained at structural joints.
+
+### Member End Releases and Constraints
+Use releases to control moment transfer at member ends. These are 12-digit strings: first 6 digits apply to the start node DOFs, last 6 to the end node DOFs.
+
+- Example: `"000111000111"` releases the three rotational DOFs at both ends (pin behavior for bending/torsion transfer).
+- Constraints (also 12-digit strings) enforce end fixity beyond node supports when needed.
+
+See `Member.releases` and `Member.constraints` in [src/beamy/frame/member.py](src/beamy/frame/member.py).
+
+### Building Frames
+Use `FrameBuilder` to define members by coordinates and add supports.
+
+```python
+import numpy as np
+from sectiony.library import rhs
+from beamy import Material
+from beamy.frame import FrameBuilder, FrameLoadCase, LoadedFrame
+
+steel = Material(name="Steel", E=200e9, G=80e9, Fy=345e6)
+sec = rhs(b=0.150, h=0.150, t=0.006, r=0.0)
+
+fb = FrameBuilder()
+
+# Add two columns and a beam between them
+fb.add("C1", (0.0, 0.0, 0.0), (0.0, 0.0, 3.0), sec, steel, orientation=(1,0,0))
+fb.add("C2", (4.0, 0.0, 0.0), (4.0, 0.0, 3.0), sec, steel, orientation=(1,0,0))
+fb.add("B1", (0.0, 0.0, 3.0), (4.0, 0.0, 3.0), sec, steel, orientation=(0,0,1))
+
+# Base supports: fixed at both column bases
+fb.support_at((0.0, 0.0, 0.0), "111111")
+fb.support_at((4.0, 0.0, 0.0), "111111")
+
+frame = fb.build()
+
+# Loads: point load at mid-span of the beam (global coords)
+loads = FrameLoadCase("Service")
+loads.add_member_point_load(
+        member_id="B1",
+        position=2.0,                      # absolute along member length (m)
+        force=np.array([0.0, -10_000.0, 0.0]),
+        moment=np.array([0.0, 0.0, 0.0]),
+        coords="global",
+        position_type="absolute",
+)
+
+lf = LoadedFrame(frame, loads)
+lf.plot(deformed=True)
+```
+
+### Supports
+Add supports by coordinate via `FrameBuilder.support_at()`:
+
+```python
+fb.support_at((x, y, z), "111111")  # fixed
+fb.support_at((x, y, z), "111000")  # pinned
+```
+
+At analysis time, those coordinates become nodes with the specified 6-DOF restraints. For truss/cable-only nodes (no beam elements attached), the solver auto-fixes rotations to avoid singular stiffness (these rotations have no physical stiffness contribution).
+
+### Loads in Frames
+Loads live in `FrameLoadCase`:
+- `add_nodal_force(node_id, force, coords)` and `add_nodal_moment(node_id, moment, coords)`
+- `add_member_point_load(member_id, position, force, moment, coords, position_type)`
+- `add_member_uniform_force(member_id, force_per_m, coords)` and distributed variants
+
+Coordinate systems:
+- `coords="global"`: vectors are in global XYZ.
+- `coords="local"`: vectors are in the member’s local axes. Local axes are defined by the member direction and its `orientation` (local Y). See `Member.transformation_matrix` in [src/beamy/frame/member.py](src/beamy/frame/member.py).
+
+Positions along members:
+- `position_type="absolute"`: distance in the same units as your model.
+- `position_type="relative"`: fraction of member length `[0,1]`.
+
+During analysis setup, point loads/moments attached along members are converted to nodal loads at inserted split nodes. Distributed loads are split across segments. See [src/beamy/frame/analysis.py](src/beamy/frame/analysis.py).
+
+### Analysis and Results
+Create `LoadedFrame(frame, loads)` to run analysis. You can access:
+- `lf.nodal_displacements`: per-node 6-DOF displacement vectors
+- `lf.reactions`: per-supported node reaction vectors
+- `lf.get_member_results(member_id)`: internal member actions from direct equilibrium (`MemberResultsDirect`), including axial, shear (`y/z`), torsion, bending (`My/Mz`), and von Mises.
+
+Example:
+```python
+res = lf.get_member_results("B1")
+print("Max Mz:", res.bending_z.abs_max)
+print("Max Vy:", res.shear_y.abs_max)
+print("Max VM:", res.von_mises.abs_max)
+```
+
+#### AISC Utilisation (Chapter F)
+Use `lf.get_aisc_utilizations()` to get governing utilisation per original member. It computes utilisation from the frame-recovered internal actions (no artificial cantilever re-solve) and stitches split segments back to the parent member for consistent results. See implementation in [src/beamy/frame/analysis.py](src/beamy/frame/analysis.py).
+
+### Visualization (Frames)
+Convenience methods on `LoadedFrame`:
+- `plot(deformed=True, ...)` – geometry + deformed shape
+- `plot_deflection(...)` – colored deflections
+- `plot_von_mises(...)` – stress coloring across members
+- `plot_aisc_utilization(...)` – members colored by utilisation; one label per original member
+
+Plot functions live in [src/beamy/viz/frame_plots.py](src/beamy/viz/frame_plots.py).
+
+### Best Practices
+- **Stability:** Constrain at least 6 independent global DOFs per load case (remove rigid-body modes). Don’t rely on incidental stiffness to stabilize the model.
+- **Connectivity:** Split long members at real joints so intersecting members share nodes; otherwise they are not connected.
+- **Pins vs Fixity:** Model pins using **member end releases** (e.g., release rotations at ends). Use node supports for boundary restraints, not for simulating member pins.
+- **Truss/Cable-only nodes:** Rotations have no stiffness; allow the solver to auto-fix rotations at those nodes.
+- **Coordinate discipline:** Be explicit about `coords="global"` vs `"local"` for loads; verify member local axes via `orientation`.
+- **Sanity checks:** Verify reaction sums, symmetry (when expected), deformed shapes, and that utilisation makes sense.
+
+---
+
+## Frame Quick Start
+
+```python
+import numpy as np
+from sectiony.library import rhs
+from beamy import Material
+from beamy.frame import FrameBuilder, FrameLoadCase, LoadedFrame
+
+steel = Material(name="Steel", E=200e9, G=80e9, Fy=345e6)
+sec = rhs(b=0.150, h=0.150, t=0.006, r=0.0)
+
+fb = FrameBuilder()
+fb.add("COL_L", (0,0,0), (0,0,2.5), sec, steel, orientation=(1,0,0))
+fb.add("COL_R", (3,0,0), (3,0,2.5), sec, steel, orientation=(1,0,0))
+fb.add("BEAM",  (0,0,2.5), (3,0,2.5), sec, steel, orientation=(0,0,1))
+
+# Pin supports at bases
+fb.support_at((0,0,0), "111000")
+fb.support_at((3,0,0), "111000")
+
+frame = fb.build()
+
+loads = FrameLoadCase("Demo")
+loads.add_member_point_load(
+        member_id="BEAM", position=1.5,
+        force=np.array([0.0, -5_000.0, 0.0]),
+        moment=np.array([0.0, 0.0, 0.0]),
+        coords="global", position_type="absolute",
+)
+
+lf = LoadedFrame(frame, loads)
+utils = lf.get_aisc_utilizations()
+print("Utilisations:", utils)
+lf.plot_aisc_utilization()
+```
 

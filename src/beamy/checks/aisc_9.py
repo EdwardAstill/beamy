@@ -1,12 +1,14 @@
-"""
-AISC 9th Edition Specification - Chapter F (ASD) checks.
-Single file implementation handling units, logic, and results.
+"""AISC Specification checks (single-file implementation).
+
+This module currently contains:
+- Chapter F (ASD): Flexure + shear checks
+- Chapter E (ASD): Axial compression (flexural buckling) checks
 """
 
 from __future__ import annotations
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 from unity.core import conv
 
@@ -110,6 +112,69 @@ class AISC9Result:
                 "capacity": self.shear.capacity, "a_over_h": self.shear.a_over_h,
                 "stiffeners_required": self.shear.stiffeners_required, "pass": self.shear.pass_,
             },
+        }
+
+
+@dataclass
+class CompressionSegmentResult:
+    x_start: float
+    x_end: float
+    K: float
+    L: float
+    r_y: float
+    r_z: float
+    slenderness_y: float
+    slenderness_z: float
+    slenderness_governing: float
+    Cc: float
+    Fa: float
+    P_comp_max: float
+    P_allow: float
+
+    @property
+    def utilisation(self) -> float:
+        if not self.P_allow:
+            return 0.0
+        return float(self.P_comp_max) / float(self.P_allow)
+
+    @property
+    def pass_(self) -> bool:
+        return self.utilisation <= 1.0 + 1e-12
+
+
+@dataclass
+class AISCChapterEResult:
+    segments: List[CompressionSegmentResult]
+    inputs: Dict[str, Any]
+
+    @property
+    def utilisation(self) -> float:
+        return max((s.utilisation for s in self.segments), default=0.0)
+
+    @property
+    def pass_(self) -> bool:
+        return all(s.pass_ for s in self.segments)
+
+    def info(self) -> Dict[str, Any]:
+        return {
+            "inputs": self.inputs,
+            "compression": [
+                {
+                    "segment": {"x_start": s.x_start, "x_end": s.x_end, "L": s.L, "K": s.K},
+                    "r": {"ry": s.r_y, "rz": s.r_z},
+                    "slenderness": {
+                        "KLr_y": s.slenderness_y,
+                        "KLr_z": s.slenderness_z,
+                        "governing": s.slenderness_governing,
+                        "Cc": s.Cc,
+                    },
+                    "allowables": {"Fa": s.Fa, "P_allow": s.P_allow},
+                    "demand": {"P_comp_max": s.P_comp_max},
+                    "utilisation": s.utilisation,
+                    "pass": s.pass_,
+                }
+                for s in self.segments
+            ],
         }
 
 # -----------------------------------------------------------------------------
@@ -303,10 +368,165 @@ def _infer_shape(dims: Dict[str, float], name: str) -> str:
     if "d" in k: return "chs" if "t" in k else "solid_round"
     return "unknown"
 
-def run(loaded_beam: LoadedBeam, **kwargs) -> AISC9Result:
-    return aisc_9_check(loaded_beam, kwargs["length_unit"], kwargs["force_unit"],
-                        channel_major_axis=kwargs.get("channel_major_axis", True),
-                        stiffener_spacing=kwargs.get("stiffener_spacing"))
+
+def _positions_with_ends(unbraced_positions: Optional[Iterable[float]], L: float) -> List[float]:
+    if unbraced_positions is None:
+        return [0.0, float(L)]
+    pos = sorted(set(float(x) for x in unbraced_positions))
+    if not pos:
+        return [0.0, float(L)]
+    if pos[0] > 1e-9:
+        pos = [0.0] + pos
+    if pos[-1] < float(L) - 1e-9:
+        pos = pos + [float(L)]
+    out: List[float] = []
+    for x in pos:
+        out.append(min(max(0.0, x), float(L)))
+    return sorted(set(out))
+
+
+def _fa_asd(E: float, Fy: float, slenderness: float) -> tuple[float, float]:
+    """Return (Fa, Cc) for AISC ASD Chapter E.
+
+    E and Fy in consistent stress units (here: ksi). Slenderness is KL/r.
+    """
+    if Fy <= 0.0 or E <= 0.0:
+        return 0.0, 0.0
+    Cc = math.sqrt((2.0 * math.pi**2 * E) / Fy)
+    if slenderness < Cc:
+        num = (1.0 - (slenderness**2) / (2.0 * Cc**2)) * Fy
+        den = (5.0 / 3.0) + (3.0 * slenderness) / (8.0 * Cc) - (slenderness**3) / (8.0 * Cc**3)
+        Fa = num / den if den != 0.0 else 0.0
+        return float(Fa), float(Cc)
+    Fa = (12.0 * math.pi**2 * E) / (23.0 * slenderness**2) if slenderness > 0.0 else 0.0
+    return float(Fa), float(Cc)
+
+
+def aisc_chapter_e_check(
+    loaded_beam: LoadedBeam,
+    length_unit: str,
+    force_unit: str,
+    *,
+    K: float = 1.0,
+    unbraced_positions: Optional[Iterable[float]] = None,
+    compression_sign: str = "negative",
+) -> AISCChapterEResult:
+    """ASD Chapter E: axial compression (flexural buckling).
+
+    This is axial-only. For combined P+M interaction, use Chapter H.
+    """
+    beam = loaded_beam.beam
+    if beam.material.Fy is None:
+        raise ValueError("Material.Fy is required.")
+
+    stress_in = f"{force_unit} {length_unit}-2"
+    fy_ksi = conv(beam.material.Fy, stress_in, "kip in-2")
+    e_ksi = conv(beam.material.E, stress_in, "kip in-2")
+
+    A_in2 = conv(beam.section.A, f"{length_unit}2", "in2")
+    Iy_in4 = conv(beam.section.Iy, f"{length_unit}4", "in4")
+    Iz_in4 = conv(beam.section.Iz, f"{length_unit}4", "in4")
+
+    r_y = math.sqrt(Iy_in4 / A_in2) if A_in2 > 0 and Iy_in4 > 0 else 0.0
+    r_z = math.sqrt(Iz_in4 / A_in2) if A_in2 > 0 and Iz_in4 > 0 else 0.0
+
+    ax = loaded_beam.axial(points=801).action
+    p_kip = np.asarray(conv(ax._values, force_unit, "kip"), dtype=float)
+    if compression_sign == "positive":
+        p_comp = np.maximum(p_kip, 0.0)
+    elif compression_sign == "abs":
+        p_comp = np.abs(p_kip)
+    else:
+        p_comp = np.maximum(-p_kip, 0.0)
+    p_comp_max = float(np.max(p_comp)) if p_comp.size else 0.0
+
+    L_in = conv(beam.L, length_unit, "in")
+    pos_in = _positions_with_ends(
+        None if unbraced_positions is None else [conv(x, length_unit, "in") for x in unbraced_positions],
+        L_in,
+    )
+
+    segs: List[CompressionSegmentResult] = []
+    for x1, x2 in zip(pos_in[:-1], pos_in[1:]):
+        L_seg = float(x2 - x1)
+        slender_y = (float(K) * L_seg / r_y) if r_y > 0 else float("inf")
+        slender_z = (float(K) * L_seg / r_z) if r_z > 0 else float("inf")
+        slender_g = max(slender_y, slender_z)
+        Fa, Cc = _fa_asd(float(e_ksi), float(fy_ksi), slender_g if math.isfinite(slender_g) else 0.0)
+        P_allow = float(Fa) * float(A_in2) if A_in2 > 0 else 0.0
+        segs.append(
+            CompressionSegmentResult(
+                x_start=float(x1),
+                x_end=float(x2),
+                K=float(K),
+                L=L_seg,
+                r_y=float(r_y),
+                r_z=float(r_z),
+                slenderness_y=float(slender_y),
+                slenderness_z=float(slender_z),
+                slenderness_governing=float(slender_g),
+                Cc=float(Cc),
+                Fa=float(Fa),
+                P_comp_max=float(p_comp_max),
+                P_allow=float(P_allow),
+            )
+        )
+
+    return AISCChapterEResult(
+        segments=segs,
+        inputs={
+            "K": float(K),
+            "compression_sign": compression_sign,
+            "original_units": {"length": length_unit, "force": force_unit},
+            "fy_ksi": float(fy_ksi),
+            "E_ksi": float(e_ksi),
+        },
+    )
+
+def run(loaded_beam: LoadedBeam, **kwargs) -> Any:
+    """Dispatch to Chapter F (default) or Chapter E.
+
+    - `chapter="f"` (default): returns `AISC9Result`
+    - `chapter="e"`: returns `AISCChapterEResult`
+    """
+    chapter = str(kwargs.get("chapter", "f")).strip().lower()
+    if chapter in ("f", "chapter_f", "chapterf"):
+        return aisc_9_check(
+            loaded_beam,
+            kwargs["length_unit"],
+            kwargs["force_unit"],
+            channel_major_axis=kwargs.get("channel_major_axis", True),
+            stiffener_spacing=kwargs.get("stiffener_spacing"),
+        )
+    if chapter in ("e", "chapter_e", "chaptere"):
+        return aisc_chapter_e_check(
+            loaded_beam,
+            kwargs["length_unit"],
+            kwargs["force_unit"],
+            K=kwargs.get("K", 1.0),
+            unbraced_positions=kwargs.get("unbraced_positions"),
+            compression_sign=kwargs.get("compression_sign", "negative"),
+        )
+    raise ValueError(f"Unknown AISC chapter: {chapter!r}")
 
 def check_chapter_f(loaded_beam: LoadedBeam, l_u: str, f_u: str) -> Dict[str, Any]:
     return aisc_9_check(loaded_beam, l_u, f_u).info()
+
+
+def check_chapter_e(
+    loaded_beam: LoadedBeam,
+    l_u: str,
+    f_u: str,
+    *,
+    K: float = 1.0,
+    unbraced_positions: Optional[Iterable[float]] = None,
+    compression_sign: str = "negative",
+) -> Dict[str, Any]:
+    return aisc_chapter_e_check(
+        loaded_beam,
+        l_u,
+        f_u,
+        K=K,
+        unbraced_positions=unbraced_positions,
+        compression_sign=compression_sign,
+    ).info()
