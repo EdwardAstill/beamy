@@ -144,10 +144,14 @@ def build_frame_and_loads(
     fb = FrameBuilder()
 
     # === BASE FRAME (250x150x6 RHS) ===
-    # Define continuous members only; connectivity nodes are created automatically
-    # during analysis where posts/brace endpoints intersect these members.
-    fb.add("BASE_L", _mm(125, 0, 0), _mm(125, 2500, 0), base_section, steel)
-    fb.add("BASE_R", _mm(1925, 0, 0), _mm(1925, 2500, 0), base_section, steel)
+    # BASE_L and BASE_R are split at intersections with BASE_C1 and BASE_C2
+    # to create proper connectivity nodes at those crossing points
+    fb.add("BASE_L_1", _mm(125, 0, 0), _mm(125, 750, 0), base_section, steel)
+    fb.add("BASE_L_2", _mm(125, 750, 0), _mm(125, 1750, 0), base_section, steel)
+    fb.add("BASE_L_3", _mm(125, 1750, 0), _mm(125, 2500, 0), base_section, steel)
+    fb.add("BASE_R_1", _mm(1925, 0, 0), _mm(1925, 750, 0), base_section, steel)
+    fb.add("BASE_R_2", _mm(1925, 750, 0), _mm(1925, 1750, 0), base_section, steel)
+    fb.add("BASE_R_3", _mm(1925, 1750, 0), _mm(1925, 2500, 0), base_section, steel)
     fb.add("BASE_C1", _mm(125, 750, 0), _mm(1925, 750, 0), base_section, steel)
     fb.add("BASE_C2", _mm(125, 1750, 0), _mm(1925, 1750, 0), base_section, steel)
 
@@ -213,12 +217,12 @@ def build_frame_and_loads(
 
     # Elevated case: fix the entire base (all nodes created on those members)
     if support_mode == "elevated":
-        for mid in ["BASE_L", "BASE_R", "BASE_C1", "BASE_C2"]:
+        for mid in ["BASE_L_1", "BASE_L_2", "BASE_L_3", "BASE_R_1", "BASE_R_2", "BASE_R_3", "BASE_C1", "BASE_C2"]:
             loads.support_member(mid, "111111")
 
     # Distributed self-weight on base members for lifted case
     if support_mode == "lifted":
-        base_member_ids = ["BASE_L", "BASE_R", "BASE_C1", "BASE_C2"]
+        base_member_ids = ["BASE_L_1", "BASE_L_2", "BASE_L_3", "BASE_R_1", "BASE_R_2", "BASE_R_3", "BASE_C1", "BASE_C2"]
         base_total_length = _sum_lengths(frame, base_member_ids)
         w = spec.base_force_n / base_total_length  # N/m
         for mid in base_member_ids:
@@ -347,6 +351,7 @@ def run_case(
         stress_limits=(0.0, 1.05 * vm_max),
         save_path=str(output_dir / "von_mises.svg"),
     )
+    loaded.plot_aisc_utilization(save_path=str(output_dir / "aisc_utilization.png"))
 
     print(f"\nPlot scale: {scale:.2f}x (max disp = {_max_translation_displacement_m(loaded)*1000:.2f} mm)")
     print(f"Max |Ux| = {_max_abs_component_displacement_m(loaded, 0)*1000:.3f} mm")

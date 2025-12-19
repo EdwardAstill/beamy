@@ -1,18 +1,20 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, Optional, List, Set
+from typing import Dict, Tuple, Optional, List, Set, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    from beamy.beam1d.analysis import LoadedBeam
 
 from .frame import Frame
 from ..core.loads import (
-    FrameLoadCase, MemberPointForce, MemberDistributedForce,
+    FrameLoadCase,
     PointForce, Moment, DistributedForce, LoadCase
 )
 from .member import Member
 from .node import Node
 from .solver import analyze_frame_geometry, solve_displacements
-from .results import MemberResults, MemberResultsDirect
-from ..core.math import build_local_stiffness_matrix, build_transformation_matrix_12x12
+from .results import MemberResultsDirect
 
 
 def _collect_fixed_dofs(frame: Frame, node_to_idx: Dict[str, int]) -> tuple[List[int], Set[str]]:
@@ -134,7 +136,8 @@ class LoadedFrame:
     
     def _validate_loads(self) -> None:
         for nf in self.loads.nodal_forces:
-            if nf.node_id not in self.frame.nodes: raise ValueError(f"Unknown node '{nf.node_id}'")
+            if nf.node_id not in self.frame.nodes:
+                raise ValueError(f"Unknown node '{nf.node_id}'")
             if getattr(nf, "coords", "global") == "local":
                 if not nf.reference_member_id:
                     raise ValueError(f"NodalForce at '{nf.node_id}' uses local coords but has no reference_member_id")
@@ -143,7 +146,8 @@ class LoadedFrame:
                 except KeyError:
                     raise ValueError(f"Unknown reference member '{nf.reference_member_id}' for nodal force at '{nf.node_id}'")
         for nm in self.loads.nodal_moments:
-            if nm.node_id not in self.frame.nodes: raise ValueError(f"Unknown node '{nm.node_id}'")
+            if nm.node_id not in self.frame.nodes:
+                raise ValueError(f"Unknown node '{nm.node_id}'")
             if getattr(nm, "coords", "global") == "local":
                 if not nm.reference_member_id:
                     raise ValueError(f"NodalMoment at '{nm.node_id}' uses local coords but has no reference_member_id")
@@ -153,11 +157,14 @@ class LoadedFrame:
                     raise ValueError(f"Unknown reference member '{nm.reference_member_id}' for nodal moment at '{nm.node_id}'")
         mids = [m.id for m in self.frame.members]
         for mpf in self.loads.member_point_forces:
-            if mpf.member_id not in mids: raise ValueError(f"Unknown member '{mpf.member_id}'")
+            if mpf.member_id not in mids:
+                raise ValueError(f"Unknown member '{mpf.member_id}'")
         for mpm in getattr(self.loads, "member_point_moments", []):
-            if mpm.member_id not in mids: raise ValueError(f"Unknown member '{mpm.member_id}'")
+            if mpm.member_id not in mids:
+                raise ValueError(f"Unknown member '{mpm.member_id}'")
         for mdf in self.loads.member_distributed_forces:
-            if mdf.member_id not in mids: raise ValueError(f"Unknown member '{mdf.member_id}'")
+            if mdf.member_id not in mids:
+                raise ValueError(f"Unknown member '{mdf.member_id}'")
 
     def _expand_model_for_attachment_points(self, frame: Frame, loads: FrameLoadCase) -> tuple[Frame, FrameLoadCase]:
         """Insert real nodes at member-point attachment locations and split members.
@@ -511,9 +518,12 @@ class LoadedFrame:
                 m_ref = self._get_reference_member(nm.reference_member_id)
                 m_g = m_ref.transformation_matrix.T @ nm.moment
             F[node_to_idx[nm.node_id]*6+3 : node_to_idx[nm.node_id]*6+6] += m_g
-        for mpf in self.loads.member_point_forces: self._add_member_point_force_to_vector(mpf, node_to_idx, F)
-        for mpm in getattr(self.loads, "member_point_moments", []): self._add_member_point_moment_to_vector(mpm, node_to_idx, F)
-        for mdf in self.loads.member_distributed_forces: self._add_member_distributed_force_to_vector(mdf, node_to_idx, F)
+        for mpf in self.loads.member_point_forces:
+            self._add_member_point_force_to_vector(mpf, node_to_idx, F)
+        for mpm in getattr(self.loads, "member_point_moments", []):
+            self._add_member_point_moment_to_vector(mpm, node_to_idx, F)
+        for mdf in self.loads.member_distributed_forces:
+            self._add_member_distributed_force_to_vector(mdf, node_to_idx, F)
         return F
 
     def _add_member_point_force_to_vector(self, mpf, node_to_idx, F):
@@ -705,7 +715,10 @@ class LoadedFrame:
 
     def to_loaded_beam(self, member_id: str) -> 'LoadedBeam':
         """
-        Extract a single member as a LoadedBeam for detailed analysis.
+        Extract a single member (combining segments if split) as a LoadedBeam for detailed analysis.
+        
+        If the member was split during analysis, all segments are recombined into a single
+        beam with their loads adjusted back to the original member's coordinate system.
         
         For nodes with fixed supports, those supports are preserved.
         For nodes without fixed supports, the reactions from the frame analysis
@@ -772,14 +785,18 @@ class LoadedFrame:
                 lc.add_moment(Moment(x=x, moment=m_l))
         
         # Add loads from member-level point forces/moments
+        # Recombine loads across all segments back to original member coordinates
         for mpf in self.loads.member_point_forces:
             seg_id = mpf.member_id
             if seg_id not in self._member_segment_parent:
                 continue
             if self._member_segment_parent[seg_id] != member_id:
                 continue
+            # Convert segment-local position to original member-local position
             x0 = float(self._member_segment_offset[seg_id])
-            x = x0 + (mpf.position * parent.length if mpf.position_type == "relative" else mpf.position)
+            # mpf.position is relative to the segment; convert to original member coordinates
+            x_in_segment = mpf.position * self.frame.get_member(seg_id).length if mpf.position_type == "relative" else mpf.position
+            x = x0 + x_in_segment
             f_l = parent.transformation_matrix @ mpf.force if mpf.coords == "global" else mpf.force
             lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
         
@@ -789,8 +806,10 @@ class LoadedFrame:
                 continue
             if self._member_segment_parent[seg_id] != member_id:
                 continue
+            # Convert segment-local position to original member-local position
             x0 = float(self._member_segment_offset[seg_id])
-            x = x0 + (mpm.position * parent.length if mpm.position_type == "relative" else mpm.position)
+            x_in_segment = mpm.position * self.frame.get_member(seg_id).length if mpm.position_type == "relative" else mpm.position
+            x = x0 + x_in_segment
             m_l = parent.transformation_matrix @ mpm.moment if mpm.coords == "global" else mpm.moment
             lc.add_moment(Moment(x=x, moment=m_l))
         
@@ -801,9 +820,12 @@ class LoadedFrame:
                 continue
             if self._member_segment_parent[seg_id] != member_id:
                 continue
+            # Convert segment-local positions to original member-local positions
             x0 = float(self._member_segment_offset[seg_id])
-            s_x = x0 + float(mdf.start_position)
-            e_x = x0 + float(mdf.end_position)
+            s_in_segment = float(mdf.start_position)
+            e_in_segment = float(mdf.end_position)
+            s_x = x0 + s_in_segment
+            e_x = x0 + e_in_segment
             s_f_l = parent.transformation_matrix @ mdf.start_force if mdf.coords == "global" else mdf.start_force
             e_f_l = parent.transformation_matrix @ mdf.end_force if mdf.coords == "global" else mdf.end_force
             lc.add_distributed_force(DistributedForce(np.array([s_x, 0, 0]), np.array([e_x, 0, 0]), s_f_l, e_f_l))
@@ -811,7 +833,6 @@ class LoadedFrame:
         # Apply reactions as boundary loads for non-fixed end nodes
         # Start node: already fixed (111111 support), don't add load
         # End node: apply negative end_f as load (reaction equilibrium)
-        start_nid = parent.start_node_id
         end_nid = parent.end_node_id
         
         if end_nid not in fixed_node_ids:
@@ -837,6 +858,128 @@ class LoadedFrame:
         
         return LoadedBeam(beam, lc)
 
+    def get_aisc_utilizations(self) -> Dict[str, float]:
+        """
+        Compute AISC Chapter F utilization ratios for all original members.
+
+        Important:
+            These utilizations are computed directly from the internal actions recovered from the
+            *frame* analysis (end forces + member distributed loads). We do NOT re-solve each member
+            as a separate 1D beam with artificial boundary conditions, because that can produce
+            incorrect results for interior members (e.g. base cross members) and can break symmetry.
+
+        Returns:
+            Dictionary mapping original member ID to its governing utilization ratio (0-1 scale).
+            Utilization = max(bending utilizations, shear utilization).
+        """
+        from ..beam1d.beam import Beam1D
+        from ..core.support import Support
+        from ..core.results import Result
+        from ..checks import aisc_9
+
+        utilizations: Dict[str, float] = {}
+
+        class _AiscActionAdapter:
+            """Minimal adapter to run AISC checks from precomputed internal actions."""
+
+            def __init__(self, beam: Beam1D, my: Result, mz: Result, vz: Result):
+                self.beam = beam
+                self._my = my
+                self._mz = mz
+                self._vz = vz
+
+            def bending(self, axis: str, points: int = 100):
+                # aisc_9 expects:
+                # - bending('y') -> strong-axis action paired with section.Sz
+                # - bending('z') -> weak-axis action paired with section.Sy
+                # In beamy frame results:
+                # - bending_y is My
+                # - bending_z is Mz
+                if axis == "y":
+                    return type("o", (), {"action": self._mz})()
+                return type("o", (), {"action": self._my})()
+
+            def shear(self, axis: str, points: int = 100):
+                # aisc_9 currently uses shear('z') only.
+                if axis == "z":
+                    return type("o", (), {"action": self._vz})()
+                return type("o", (), {"action": Result(self._vz._x, self._vz._values * 0.0)})()
+
+        def _util_from_results(member: Member, my: Result, mz: Result, vz: Result) -> float:
+            # Supports are only used by aisc_9 for unbraced-length segmentation.
+            # Keep the existing conservative behavior: treat member as unbraced for full length.
+            beam = Beam1D(
+                L=member.length,
+                material=member.material,
+                section=member.section,
+                supports=[Support(x=0.0, type="111111")],
+            )
+            adapter = _AiscActionAdapter(beam, my=my, mz=mz, vz=vz)
+            return float(aisc_9.run(adapter, length_unit="m", force_unit="N").utilisation)
+
+        def _stitch_parent_results(parent_id: str) -> tuple[Result, Result, Result]:
+            parent = self.original_frame.get_member(parent_id)
+            seg_ids = self._member_bundle.get(parent_id, [parent_id])
+
+            # Sample the parent at a fixed grid so we can combine segments robustly.
+            points = 801
+            xs = np.linspace(0.0, parent.length, points)
+            my = np.zeros_like(xs)
+            mz = np.zeros_like(xs)
+            vz = np.zeros_like(xs)
+
+            offsets: List[Tuple[float, str, float]] = []
+            for seg_id in seg_ids:
+                seg = self.frame.get_member(seg_id)
+                offsets.append((float(self._member_segment_offset.get(seg_id, 0.0)), seg_id, float(seg.length)))
+
+            for i, x in enumerate(xs):
+                for x0, seg_id, seg_L in offsets:
+                    if x >= x0 - 1e-9 and x <= x0 + seg_L + 1e-9:
+                        res = self.get_member_results(seg_id)
+                        xl = float(x - x0)
+                        my[i] = res.bending_y.action.at(xl)
+                        mz[i] = res.bending_z.action.at(xl)
+                        vz[i] = res.shear_z.action.at(xl)
+                        break
+
+            return Result(xs, my), Result(xs, mz), Result(xs, vz)
+
+        # If we didn't split, compute per-solver-member (frame members are already original).
+        has_bundles = bool(self._member_bundle) and any(len(v) > 1 for v in self._member_bundle.values())
+        if not has_bundles:
+            for member in self.frame.members:
+                if member.element_type != "beam":
+                    utilizations[member.id] = 0.0
+                    continue
+                try:
+                    res = self.get_member_results(member.id)
+                    util = _util_from_results(
+                        member,
+                        my=res.bending_y.action,
+                        mz=res.bending_z.action,
+                        vz=res.shear_z.action,
+                    )
+                    utilizations[member.id] = util
+                except Exception:
+                    utilizations[member.id] = 0.0
+            return utilizations
+
+        # Bundled path: one utilization per original member.
+        for parent in self.original_frame.members:
+            if parent.id not in self._member_bundle:
+                continue
+            if parent.element_type != "beam":
+                utilizations[parent.id] = 0.0
+                continue
+            try:
+                my, mz, vz = _stitch_parent_results(parent.id)
+                utilizations[parent.id] = _util_from_results(parent, my=my, mz=mz, vz=vz)
+            except Exception:
+                utilizations[parent.id] = 0.0
+
+        return utilizations
+
     def plot(self, **kwargs):
         from ..viz.frame_plots import plot_frame
         plot_frame(self, **kwargs)
@@ -852,3 +995,6 @@ class LoadedFrame:
     def plot_member_diagrams(self, member_id: str, **kwargs):
         from ..viz.frame_plots import plot_member_diagrams
         plot_member_diagrams(self, member_id, **kwargs)
+    def plot_aisc_utilization(self, **kwargs):
+        from ..viz.frame_plots import plot_aisc_utilization
+        plot_aisc_utilization(self, **kwargs)

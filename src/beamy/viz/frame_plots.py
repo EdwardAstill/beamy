@@ -458,6 +458,110 @@ def plot_member_diagrams(loaded_frame: LoadedFrame, member_id: str, save_path: O
     else:
         plt.show()
 
+
+def plot_aisc_utilization(
+    loaded_frame: LoadedFrame,
+    show_node_ids: bool = True,
+    save_path: Optional[str] = None,
+    colormap: str = "RdYlGn_r"
+) -> None:
+    """
+    Plot frame with members colored by AISC Chapter F utilization ratio.
+    
+    Green = low utilization, Yellow = moderate, Red = high (approaching 1.0).
+    For split members, uses the utilization of the original member (combined segments).
+    Only one label is shown per original member (at the midpoint of the full member).
+    """
+    fig = plt.figure(figsize=(12, 9))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Get AISC utilizations for all members
+    utilizations = loaded_frame.get_aisc_utilizations()
+    
+    if not utilizations:
+        print("No utilizations computed")
+        return
+    
+    # Normalize utilizations for colormap
+    util_values = list(utilizations.values())
+    max_util = max(util_values) if util_values else 1.0
+    
+    # Use max(max_util, 1.0) to ensure the scale goes at least to 1.0
+    norm_max = max(max_util, 1.0)
+    norm = Normalize(vmin=0.0, vmax=norm_max)
+    cmap = plt.get_cmap(colormap)
+    
+    node_pos = loaded_frame.frame.node_positions
+    
+    # Track which original members have been labeled
+    labeled_parents = set()
+    
+    # Plot members with color based on utilization
+    for member in loaded_frame.frame.members:
+        seg_id = member.id
+        s, e = node_pos[member.start_node_id], node_pos[member.end_node_id]
+        
+        # For split members, look up the parent (original) member's utilization
+        # The utilizations dict has original member IDs when members are bundled
+        if seg_id in loaded_frame._member_segment_parent:
+            parent_id = loaded_frame._member_segment_parent[seg_id]
+            util = utilizations.get(parent_id, 0.0)
+        else:
+            # Not a split member or no bundling info; use segment ID directly
+            parent_id = seg_id
+            util = utilizations.get(seg_id, 0.0)
+        
+        color = cmap(norm(util))
+        
+        ax.plot([s[0], e[0]], [s[1], e[1]], [s[2], e[2]], color=color, lw=3, alpha=0.8)
+        
+        # Add text label only once per original member (at full member midpoint)
+        if parent_id not in labeled_parents:
+            labeled_parents.add(parent_id)
+            # Get full member midpoint using original frame
+            try:
+                parent = loaded_frame.original_frame.get_member(parent_id)
+                parent_start = loaded_frame.original_frame.get_node(parent.start_node_id).position
+                parent_end = loaded_frame.original_frame.get_node(parent.end_node_id).position
+                mid = (parent_start + parent_end) / 2
+            except:
+                mid = (s + e) / 2
+            ax.text(mid[0], mid[1], mid[2], f'{util:.2f}', fontsize=8, ha='center',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
+    
+    # Plot nodes and constraints
+    for nid, pos in node_pos.items():
+        node = loaded_frame.frame.nodes[nid]
+        if node.support:
+            # Constrained node: red dot
+            ax.scatter([pos[0]], [pos[1]], [pos[2]], c='red', marker='s', s=100, zorder=10)
+        else:
+            # Free node: small black dot
+            ax.scatter([pos[0]], [pos[1]], [pos[2]], c='black', marker='o', s=50, zorder=10)
+        
+        if show_node_ids:
+            offset = pos[2] * 0.05 if node.support else pos[2] * 0.08
+            ax.text(pos[0], pos[1], pos[2] + offset, nid, fontsize=8, ha='center', color='gray')
+    
+    # Add colorbar
+    sm = ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, pad=0.1, shrink=0.8)
+    cbar.set_label('AISC Utilization Ratio', fontsize=11, weight='bold')
+    
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_zlabel('Z (m)')
+    ax.set_title('AISC Chapter F Utilization Plot', fontsize=14, weight='bold')
+    
+    _set_axes_equal(ax)
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved AISC utilization plot to {save_path}")
+    else:
+        plt.show()
+
 def _set_axes_equal(ax):
     """Set 3D axes to equal scale."""
     lims = np.array([ax.get_xlim3d(), ax.get_ylim3d(), ax.get_zlim3d()])
