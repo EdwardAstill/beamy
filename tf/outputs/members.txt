@@ -11,8 +11,8 @@ Member BASE_C1 (type=beam)
   Supports:
     Frame supports (node constraints):
       x=0.000 m, node=N1, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
-      x=0.475 m, node=N8, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
-      x=1.325 m, node=N12, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+      x=0.475 m, node=N8, type=111111, R(F)=[-0.000, 2337.554, -6557.985] N, R(M)=[-143.837, -0.000, -0.000] Nm
+      x=1.325 m, node=N12, type=111111, R(F)=[-0.000, 2337.554, -6557.985] N, R(M)=[-143.837, -0.000, -0.000] Nm
       x=1.800 m, node=N5, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
     LoadedBeam supports (1D extraction):
       x=0.000 m, type=111111, reactions: (none)
@@ -20,7 +20,7 @@ Member BASE_C1 (type=beam)
       x=1.325 m, type=111111, reactions: (none)
       x=1.800 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -34,8 +34,8 @@ Member BASE_C2 (type=beam)
   Supports:
     Frame supports (node constraints):
       x=0.000 m, node=N2, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
-      x=0.475 m, node=N10, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
-      x=1.325 m, node=N14, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+      x=0.475 m, node=N10, type=111111, R(F)=[-0.000, -2337.554, -6557.985] N, R(M)=[143.837, -0.000, -0.000] Nm
+      x=1.325 m, node=N14, type=111111, R(F)=[-0.000, -2337.554, -6557.985] N, R(M)=[143.837, -0.000, -0.000] Nm
       x=1.800 m, node=N6, type=111111, R(F)=[0.000, 0.000, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
     LoadedBeam supports (1D extraction):
       x=0.000 m, type=111111, reactions: (none)
@@ -43,7 +43,7 @@ Member BASE_C2 (type=beam)
       x=1.325 m, type=111111, reactions: (none)
       x=1.800 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -62,7 +62,7 @@ Member BASE_L_1 (type=beam)
       x=0.000 m, type=111111, reactions: (none)
       x=0.750 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -81,7 +81,7 @@ Member BASE_L_2 (type=beam)
       x=0.000 m, type=111111, reactions: (none)
       x=1.000 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -100,7 +100,7 @@ Member BASE_L_3 (type=beam)
       x=0.000 m, type=111111, reactions: (none)
       x=0.750 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -119,7 +119,7 @@ Member BASE_R_1 (type=beam)
       x=0.000 m, type=111111, reactions: (none)
       x=0.750 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -138,7 +138,7 @@ Member BASE_R_2 (type=beam)
       x=0.000 m, type=111111, reactions: (none)
       x=1.000 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -157,7 +157,7 @@ Member BASE_R_3 (type=beam)
       x=0.000 m, type=111111, reactions: (none)
       x=0.750 m, type=111111, reactions: (none)
   Loads:
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
     Governing: 0.000
@@ -172,14 +172,14 @@ Member BR1 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=2337.554
+      x=0.000 m, type=111111, reactions: (none)
   Loads:
+    PointForce at x=0.000 m: F=[2337.554, 0.000, -0.000] N
     PointForce at x=1.000 m: F=[-2337.554, -0.000, -0.000] N
-  Utilisation:
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
-    Compression (Chap E): 0.003
-    Governing: 0.003
+    Governing: 0.000
 
 Member BR2 (type=beam)
   Length: 1.000 m
@@ -191,14 +191,14 @@ Member BR2 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=2337.554
+      x=0.000 m, type=111111, reactions: (none)
   Loads:
-    PointForce at x=1.000 m: F=[-2337.554, 0.000, -0.000] N
-  Utilisation:
+    PointForce at x=0.000 m: F=[2337.554, -0.000, -0.000] N
+    PointForce at x=1.000 m: F=[-2337.554, -0.000, -0.000] N
+  Utilisation (direct frame analysis):
     Bending[1]: 0.000
     Bending[2]: 0.000
-    Compression (Chap E): 0.003
-    Governing: 0.003
+    Governing: 0.000
 
 Member P1 (type=beam)
   Length: 1.775 m
@@ -208,18 +208,19 @@ Member P1 (type=beam)
     dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      x=0.000 m, node=N8, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+      x=0.000 m, node=N8, type=111111, R(F)=[-0.000, 2337.554, -6557.985] N, R(M)=[-143.837, -0.000, -0.000] Nm
     LoadedBeam supports (1D extraction):
       x=0.000 m, type=111111, reactions: Fx=6557.985, My=-557.429
   Loads:
     PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
     PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
     Moment at x=1.111 m: M=[0.000, 557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.000
-    Bending[2]: 0.014
-    Compression (Chap E): 0.010
-    Governing: 0.014
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.015
+    Bending[2]: 0.000
+    Shear: 0.019
+    Interaction (Chap H): 0.025
+    Governing: 0.025
 
 Member P2 (type=beam)
   Length: 1.775 m
@@ -229,19 +230,19 @@ Member P2 (type=beam)
     dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      x=0.000 m, node=N10, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+      x=0.000 m, node=N10, type=111111, R(F)=[-0.000, -2337.554, -6557.985] N, R(M)=[143.837, -0.000, -0.000] Nm
     LoadedBeam supports (1D extraction):
       x=0.000 m, type=111111, reactions: Fx=6557.985, My=557.429
   Loads:
-    PointForce at x=1.775 m: F=[-0.000, -0.000, 0.000] N
+    PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
     PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
     Moment at x=1.111 m: M=[0.000, -557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.000
-    Bending[2]: 0.014
-    Shear: 0.000
-    Compression (Chap E): 0.010
-    Governing: 0.014
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.015
+    Bending[2]: 0.000
+    Shear: 0.019
+    Interaction (Chap H): 0.025
+    Governing: 0.025
 
 Member P3 (type=beam)
   Length: 1.775 m
@@ -251,18 +252,19 @@ Member P3 (type=beam)
     dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      x=0.000 m, node=N12, type=111111, R(F)=[0.000, -2337.554, 6557.985] N, R(M)=[143.837, 0.000, 0.000] Nm
+      x=0.000 m, node=N12, type=111111, R(F)=[-0.000, 2337.554, -6557.985] N, R(M)=[-143.837, -0.000, -0.000] Nm
     LoadedBeam supports (1D extraction):
       x=0.000 m, type=111111, reactions: Fx=6557.985, My=-557.429
   Loads:
     PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
     PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
     Moment at x=1.111 m: M=[0.000, 557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.000
-    Bending[2]: 0.014
-    Compression (Chap E): 0.010
-    Governing: 0.014
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.015
+    Bending[2]: 0.000
+    Shear: 0.019
+    Interaction (Chap H): 0.025
+    Governing: 0.025
 
 Member P4 (type=beam)
   Length: 1.775 m
@@ -272,21 +274,22 @@ Member P4 (type=beam)
     dims: b=0.1500 m, h=0.1500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      x=0.000 m, node=N14, type=111111, R(F)=[0.000, 2337.554, 6557.985] N, R(M)=[-143.837, 0.000, 0.000] Nm
+      x=0.000 m, node=N14, type=111111, R(F)=[-0.000, -2337.554, -6557.985] N, R(M)=[143.837, -0.000, -0.000] Nm
     LoadedBeam supports (1D extraction):
       x=0.000 m, type=111111, reactions: Fx=6557.985, My=557.429
   Loads:
-    PointForce at x=1.775 m: F=[-0.000, -0.000, -0.000] N
+    PointForce at x=1.775 m: F=[-0.000, -0.000, 0.000] N
     PointForce at x=1.111 m: F=[-6557.985, 0.000, 0.000] N
     Moment at x=1.111 m: M=[0.000, -557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.000
-    Bending[2]: 0.014
-    Compression (Chap E): 0.010
-    Governing: 0.014
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.015
+    Bending[2]: 0.000
+    Shear: 0.019
+    Interaction (Chap H): 0.025
+    Governing: 0.025
 
 === TF - Lifted (lifted) ===
-Members: 14
+Members: 18
 
 Member BASE_C1 (type=beam)
   Length: 1.800 m
@@ -298,19 +301,21 @@ Member BASE_C1 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=-87.797, Fy=587.559, Fz=-17998.647, Mx=-11.122, My=-42565.205, Mz=-2045.956
+      x=0.000 m, type=111111, reactions: Fx=-0.000, Fy=-1341.045, Fz=-39899.224, Mx=39.077, My=-35909.301, Mz=-1206.941
   Loads:
-    PointForce at x=1.800 m: F=[87.797, 2860.843, 17998.647] N
-    Moment at x=1.800 m: M=[-20.834, 3346.627, 1.964] Nm
-    Moment at x=0.000 m: M=[31.956, 6821.013, -1.964] Nm
+    PointForce at x=0.000 m: F=[-5155.651, 2394.724, 19949.612] N
+    PointForce at x=1.800 m: F=[5155.651, 2394.724, 19949.612] N
+    Moment at x=0.000 m: M=[-19.538, -5865.187, -0.000] Nm
+    Moment at x=1.800 m: M=[-19.538, 5865.187, -0.000] Nm
     DistForce from x=0.000 to 0.475 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
     DistForce from x=0.475 to 1.325 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
     DistForce from x=1.325 to 1.800 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.070
-    Bending[2]: 0.570
-    Shear: 0.087
-    Governing: 0.570
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.080
+    Bending[2]: 0.088
+    Shear: 0.096
+    Interaction (Chap H): 0.178
+    Governing: 0.178
 
 Member BASE_C2 (type=beam)
   Length: 1.800 m
@@ -322,19 +327,21 @@ Member BASE_C2 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=-4427.656, Fy=609.803, Fz=21854.866, Mx=-11.122, My=49506.400, Mz=-2005.917
+      x=0.000 m, type=111111, reactions: Fx=0.000, Fy=-1341.045, Fz=39899.224, Mx=-39.077, My=35909.301, Mz=-1206.941
   Loads:
-    PointForce at x=1.800 m: F=[4427.656, 2838.599, -21854.866] N
-    Moment at x=1.800 m: M=[31.956, -6821.013, -1.964] Nm
-    Moment at x=0.000 m: M=[-20.834, -3346.627, 1.964] Nm
+    PointForce at x=0.000 m: F=[-5155.651, 2394.724, -19949.612] N
+    PointForce at x=1.800 m: F=[5155.651, 2394.724, -19949.612] N
+    Moment at x=0.000 m: M=[19.538, 5865.187, 0.000] Nm
+    Moment at x=1.800 m: M=[19.538, -5865.187, -0.000] Nm
     DistForce from x=0.000 to 0.475 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
     DistForce from x=0.475 to 1.325 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
     DistForce from x=1.325 to 1.800 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.070
-    Bending[2]: 0.736
-    Shear: 0.106
-    Governing: 0.736
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.080
+    Bending[2]: 0.088
+    Shear: 0.096
+    Interaction (Chap H): 0.178
+    Governing: 0.178
 
 Member BASE_L_1 (type=beam)
   Length: 0.750 m
@@ -344,18 +351,19 @@ Member BASE_L_1 (type=beam)
     dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      x=0.000 m, node=N0, type=110000, R(F)=[4515.453, 3856.219, -0.000] N, R(M)=[0.000, 0.000, -0.000] Nm
+      x=0.000 m, node=N0, type=110000, R(F)=[-5155.651, -7979.845, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=-3856.219, Fy=2155.251, Fz=-4515.453, My=-6773.179, Mz=538.813
+      x=0.000 m, type=111111, reactions: Fx=-7979.845, Fy=2873.668, Fz=-5155.651, My=-7733.476, Mz=1077.626
   Loads:
-    PointForce at x=0.750 m: F=[3856.219, -718.417, 4515.453] N
-    Moment at x=0.750 m: M=[-0.000, 3386.590, 538.813] Nm
+    PointForce at x=0.750 m: F=[7979.845, -1436.834, 5155.651] N
+    Moment at x=0.750 m: M=[-0.000, 3866.738, 538.813] Nm
     DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.007
-    Bending[2]: 0.108
-    Shear: 0.022
-    Governing: 0.108
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.053
+    Bending[2]: 0.009
+    Shear: 0.025
+    Interaction (Chap H): 0.070
+    Governing: 0.070
 
 Member BASE_L_2 (type=beam)
   Length: 1.000 m
@@ -367,18 +375,19 @@ Member BASE_L_2 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=17998.647, Fy=1926.901, Fz=-87.797, Mx=3.927, My=6693.255, Mz=-55.824
+      x=0.000 m, type=111111, reactions: Fy=3831.558, Mz=1915.779
   Loads:
-    PointForce at x=1.000 m: F=[-17998.647, -11.122, 87.797] N
-    Moment at x=1.000 m: M=[-1.964, -3346.627, 517.979] Nm
-    Moment at x=0.000 m: M=[-1.964, -3434.424, 506.857] Nm
+    PointForce at x=0.000 m: F=[11969.767, -957.889, -0.000] N
+    PointForce at x=1.000 m: F=[-11969.767, -957.889, 0.000] N
+    Moment at x=0.000 m: M=[0.000, 1998.449, -519.274] Nm
+    Moment at x=1.000 m: M=[-0.000, -1998.449, 519.274] Nm
     DistForce from x=0.000 to 1.000 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.006
-    Bending[2]: 0.052
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.027
+    Bending[2]: 0.008
     Shear: 0.000
-    Compression (Chap E): 0.020
-    Governing: 0.052
+    Interaction (Chap H): 0.036
+    Governing: 0.036
 
 Member BASE_L_3 (type=beam)
   Length: 0.750 m
@@ -388,19 +397,20 @@ Member BASE_L_3 (type=beam)
     dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      (none)
+      x=0.750 m, node=N3, type=110000, R(F)=[-5155.651, 7979.845, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fy=718.417, Mz=-538.813
+      x=0.000 m, type=001111, reactions: Fz=-5155.651, My=3866.738, Mz=-1077.626
+      x=0.750 m, type=110000, reactions: Fx=7979.845, Fy=2873.668
   Loads:
-    PointForce at x=0.750 m: F=[-0.000, 718.417, 0.000] N
-    Moment at x=0.750 m: M=[-0.000, 0.000, 0.000] Nm
-    Moment at x=0.000 m: M=[-0.000, 0.000, 538.813] Nm
+    PointForce at x=0.000 m: F=[-7979.845, -1436.834, 5155.651] N
+    Moment at x=0.000 m: M=[-0.000, -3866.738, -538.813] Nm
     DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.007
-    Bending[2]: 0.000
-    Shear: 0.000
-    Governing: 0.007
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.053
+    Bending[2]: 0.009
+    Shear: 0.025
+    Interaction (Chap H): 0.070
+    Governing: 0.070
 
 Member BASE_R_1 (type=beam)
   Length: 0.750 m
@@ -410,18 +420,19 @@ Member BASE_R_1 (type=beam)
     dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      (none)
+      x=0.000 m, node=N4, type=110000, R(F)=[5155.651, -7979.845, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fy=2155.251, Mz=538.813
+      x=0.000 m, type=111111, reactions: Fx=-7979.845, Fy=2873.668, Fz=5155.651, My=7733.476, Mz=1077.626
   Loads:
-    PointForce at x=0.750 m: F=[-0.000, -718.417, -0.000] N
-    Moment at x=0.750 m: M=[-0.000, -0.000, 538.813] Nm
+    PointForce at x=0.750 m: F=[7979.845, -1436.834, -5155.651] N
+    Moment at x=0.750 m: M=[-0.000, -3866.738, 538.813] Nm
     DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.007
-    Bending[2]: 0.000
-    Shear: 0.000
-    Governing: 0.007
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.053
+    Bending[2]: 0.009
+    Shear: 0.025
+    Interaction (Chap H): 0.070
+    Governing: 0.070
 
 Member BASE_R_2 (type=beam)
   Length: 1.000 m
@@ -433,18 +444,19 @@ Member BASE_R_2 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=17998.647, Fy=1904.657, Fz=-87.797, Mx=3.927, My=-6868.848, Mz=-78.068
+      x=0.000 m, type=111111, reactions: Fy=3831.558, My=-0.000, Mz=1915.779
   Loads:
-    PointForce at x=1.000 m: F=[-17998.647, 11.122, 87.797] N
-    Moment at x=1.000 m: M=[-1.964, 3434.424, 506.857] Nm
-    Moment at x=0.000 m: M=[-1.964, 3346.627, 517.979] Nm
+    PointForce at x=0.000 m: F=[11969.767, -957.889, -0.000] N
+    PointForce at x=1.000 m: F=[-11969.767, -957.889, 0.000] N
+    Moment at x=0.000 m: M=[0.000, -1998.449, -519.274] Nm
+    Moment at x=1.000 m: M=[-0.000, 1998.449, 519.274] Nm
     DistForce from x=0.000 to 1.000 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.007
-    Bending[2]: 0.056
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.027
+    Bending[2]: 0.008
     Shear: 0.000
-    Compression (Chap E): 0.020
-    Governing: 0.056
+    Interaction (Chap H): 0.036
+    Governing: 0.036
 
 Member BASE_R_3 (type=beam)
   Length: 0.750 m
@@ -454,17 +466,20 @@ Member BASE_R_3 (type=beam)
     dims: b=0.1500 m, h=0.2500 m, t=0.0060 m
   Supports:
     Frame supports (node constraints):
-      x=0.750 m, node=N7, type=110000, R(F)=[-4515.453, -3856.219, -0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
+      x=0.750 m, node=N7, type=110000, R(F)=[5155.651, 7979.845, 0.000] N, R(M)=[0.000, 0.000, 0.000] Nm
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=001111, reactions: My=3386.590, Mz=-1077.626
-      x=0.750 m, type=110000, reactions: Fy=1436.834
+      x=0.000 m, type=001111, reactions: Fz=5155.651, My=-3866.738, Mz=-1077.626
+      x=0.750 m, type=110000, reactions: Fx=7979.845, Fy=2873.668
   Loads:
-    Moment at x=0.000 m: M=[-0.000, -3386.590, 538.813] Nm
+    PointForce at x=0.000 m: F=[-7979.845, -1436.834, -5155.651] N
+    Moment at x=0.000 m: M=[0.000, 3866.738, -538.813] Nm
     DistForce from x=0.000 to 0.750 m: w_start=[0.000, -1915.779, 0.000] N/m, w_end=[0.000, -1915.779, 0.000] N/m
-  Utilisation:
-    Bending[1]: 0.015
-    Bending[2]: 0.000
-    Governing: 0.015
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.053
+    Bending[2]: 0.009
+    Shear: 0.025
+    Interaction (Chap H): 0.070
+    Governing: 0.070
 
 Member BR1 (type=beam)
   Length: 1.000 m
@@ -476,16 +491,16 @@ Member BR1 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=-24375.469, Fy=1479.694, Fz=-2173.719, My=-2173.719, Mz=1479.694
+      x=0.000 m, type=111111, reactions: (none)
   Loads:
-    PointForce at x=1.000 m: F=[24375.469, -1479.694, 2173.719] N
-    Moment at x=1.000 m: M=[-0.000, -0.000, -0.000] Nm
-    Moment at x=0.000 m: M=[0.000, -0.000, -0.000] Nm
-  Utilisation:
-    Bending[1]: 0.041
-    Bending[2]: 0.053
-    Shear: 0.018
-    Governing: 0.053
+    PointForce at x=0.000 m: F=[-24398.324, 0.000, 0.000] N
+    PointForce at x=1.000 m: F=[24398.324, -0.000, -0.000] N
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Shear: 0.000
+    Interaction (Chap H): 0.036
+    Governing: 0.036
 
 Member BR2 (type=beam)
   Length: 1.000 m
@@ -497,16 +512,16 @@ Member BR2 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=-24375.469, Fy=-1479.694, Fz=-2173.719, My=-2173.719, Mz=-1479.694
+      x=0.000 m, type=111111, reactions: (none)
   Loads:
-    PointForce at x=1.000 m: F=[24375.469, 1479.694, 2173.719] N
-    Moment at x=1.000 m: M=[0.000, 0.000, -0.000] Nm
-    Moment at x=0.000 m: M=[-0.000, 0.000, -0.000] Nm
-  Utilisation:
-    Bending[1]: 0.041
-    Bending[2]: 0.053
-    Shear: 0.018
-    Governing: 0.053
+    PointForce at x=0.000 m: F=[-24398.324, 0.000, 0.000] N
+    PointForce at x=1.000 m: F=[24398.324, -0.000, -0.000] N
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Shear: 0.000
+    Interaction (Chap H): 0.036
+    Governing: 0.036
 
 Member P1 (type=beam)
   Length: 1.775 m
@@ -518,18 +533,19 @@ Member P1 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=17245.593, Fy=3785.195, Fz=4453.170, My=7312.641, Mz=12785.325
+      x=0.000 m, type=111111, reactions: Fx=13115.970, Fz=24398.324, My=7358.574
   Loads:
-    PointForce at x=1.775 m: F=[-10687.608, -3785.195, -4453.170] N
+    PointForce at x=0.000 m: F=[4118.925, 3781.406, -19949.612] N
+    PointForce at x=1.775 m: F=[-10676.910, -3781.406, -4448.712] N
     PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
-    Moment at x=0.000 m: M=[-0.000, 34.308, -6066.605] Nm
+    Moment at x=0.000 m: M=[-0.000, -19.538, 6711.995] Nm
     Moment at x=0.875 m: M=[0.000, 557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.185
-    Bending[2]: 0.191
-    Shear: 0.036
-    Compression (Chap E): 0.027
-    Governing: 0.191
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.162
+    Bending[2]: 0.163
+    Shear: 0.161
+    Interaction (Chap H): 0.319
+    Governing: 0.319
 
 Member P2 (type=beam)
   Length: 1.775 m
@@ -541,18 +557,19 @@ Member P2 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=17224.196, Fy=3777.616, Fz=-4444.255, My=-7312.641, Mz=14062.654
+      x=0.000 m, type=111111, reactions: Fx=13115.970, Fy=0.000, Fz=-24398.324, My=-7358.574
   Loads:
-    PointForce at x=1.775 m: F=[-10666.211, -3777.616, 4444.255] N
+    PointForce at x=0.000 m: F=[4118.925, 3781.406, 19949.612] N
+    PointForce at x=1.775 m: F=[-10676.910, -3781.406, 4448.712] N
     PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
-    Moment at x=0.000 m: M=[0.000, -18.483, -7357.385] Nm
+    Moment at x=0.000 m: M=[0.000, 19.538, 6711.995] Nm
     Moment at x=0.875 m: M=[0.000, -557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.185
-    Bending[2]: 0.191
-    Shear: 0.036
-    Compression (Chap E): 0.027
-    Governing: 0.191
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.162
+    Bending[2]: 0.163
+    Shear: 0.161
+    Interaction (Chap H): 0.319
+    Governing: 0.319
 
 Member P3 (type=beam)
   Length: 1.775 m
@@ -564,18 +581,19 @@ Member P3 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=17224.196, Fy=-3777.616, Fz=4444.255, My=7312.641, Mz=-14062.654
+      x=0.000 m, type=111111, reactions: Fx=13115.970, Fz=24398.324, My=7358.574
   Loads:
-    PointForce at x=1.775 m: F=[-10666.211, 3777.616, -4444.255] N
+    PointForce at x=0.000 m: F=[4118.925, -3781.406, -19949.612] N
+    PointForce at x=1.775 m: F=[-10676.910, 3781.406, -4448.712] N
     PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
-    Moment at x=0.000 m: M=[0.000, 18.483, 7357.385] Nm
+    Moment at x=0.000 m: M=[-0.000, -19.538, -6711.995] Nm
     Moment at x=0.875 m: M=[0.000, 557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.185
-    Bending[2]: 0.191
-    Shear: 0.036
-    Compression (Chap E): 0.027
-    Governing: 0.191
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.162
+    Bending[2]: 0.163
+    Shear: 0.161
+    Interaction (Chap H): 0.319
+    Governing: 0.319
 
 Member P4 (type=beam)
   Length: 1.775 m
@@ -587,15 +605,88 @@ Member P4 (type=beam)
     Frame supports (node constraints):
       (none)
     LoadedBeam supports (1D extraction):
-      x=0.000 m, type=111111, reactions: Fx=17245.593, Fy=-3785.195, Fz=-4453.170, My=-7312.641, Mz=-12785.325
+      x=0.000 m, type=111111, reactions: Fx=13115.970, Fz=-24398.324, My=-7358.574
   Loads:
-    PointForce at x=1.775 m: F=[-10687.608, 3785.195, 4453.170] N
+    PointForce at x=0.000 m: F=[4118.925, -3781.406, 19949.612] N
+    PointForce at x=1.775 m: F=[-10676.910, 3781.406, 4448.712] N
     PointForce at x=0.875 m: F=[-6557.985, 0.000, 0.000] N
-    Moment at x=0.000 m: M=[-0.000, -34.308, 6066.605] Nm
+    Moment at x=0.000 m: M=[-0.000, 19.538, -6711.995] Nm
     Moment at x=0.875 m: M=[0.000, -557.429, 0.000] Nm
-  Utilisation:
-    Bending[1]: 0.185
-    Bending[2]: 0.191
-    Shear: 0.036
-    Compression (Chap E): 0.027
-    Governing: 0.191
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.162
+    Bending[2]: 0.163
+    Shear: 0.161
+    Interaction (Chap H): 0.319
+    Governing: 0.319
+
+Member SL1 (type=cable)
+  Length: 1.368 m
+  Material: Sling, E=5.000e+10 Pa, G=2.000e+10 Pa, Fy=1.000e+09 Pa
+  Section: CHS 0.02x0.002
+    A=1.123720e-04, Iy=4.577744e-09, Iz=4.577744e-09, J=1.872100e-10, Sy=4.577744e-07, Sz=4.577744e-07, y_max=1.000000e-02, z_max=1.000000e-02
+    dims: d=0.0200 m, t=0.0020 m
+  Supports:
+    Frame supports (node constraints):
+      x=1.368 m, node=N20, type=111111, R(F)=[-0.000, -0.000, -42707.639] N, R(M)=[-0.000, -0.000, -0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=1.368 m, type=111111, reactions: Fx=-12169.078
+  Loads:
+    PointForce at x=0.000 m: F=[12169.078, 0.000, 0.000] N
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member SL2 (type=cable)
+  Length: 1.368 m
+  Material: Sling, E=5.000e+10 Pa, G=2.000e+10 Pa, Fy=1.000e+09 Pa
+  Section: CHS 0.02x0.002
+    A=1.123720e-04, Iy=4.577744e-09, Iz=4.577744e-09, J=1.872100e-10, Sy=4.577744e-07, Sz=4.577744e-07, y_max=1.000000e-02, z_max=1.000000e-02
+    dims: d=0.0200 m, t=0.0020 m
+  Supports:
+    Frame supports (node constraints):
+      x=1.368 m, node=N20, type=111111, R(F)=[-0.000, -0.000, -42707.639] N, R(M)=[-0.000, -0.000, -0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=1.368 m, type=111111, reactions: Fx=-12169.078
+  Loads:
+    PointForce at x=0.000 m: F=[12169.078, 0.000, 0.000] N
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member SL3 (type=cable)
+  Length: 1.368 m
+  Material: Sling, E=5.000e+10 Pa, G=2.000e+10 Pa, Fy=1.000e+09 Pa
+  Section: CHS 0.02x0.002
+    A=1.123720e-04, Iy=4.577744e-09, Iz=4.577744e-09, J=1.872100e-10, Sy=4.577744e-07, Sz=4.577744e-07, y_max=1.000000e-02, z_max=1.000000e-02
+    dims: d=0.0200 m, t=0.0020 m
+  Supports:
+    Frame supports (node constraints):
+      x=1.368 m, node=N20, type=111111, R(F)=[-0.000, -0.000, -42707.639] N, R(M)=[-0.000, -0.000, -0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=1.368 m, type=111111, reactions: Fx=-12169.078
+  Loads:
+    PointForce at x=0.000 m: F=[12169.078, 0.000, 0.000] N
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000
+
+Member SL4 (type=cable)
+  Length: 1.368 m
+  Material: Sling, E=5.000e+10 Pa, G=2.000e+10 Pa, Fy=1.000e+09 Pa
+  Section: CHS 0.02x0.002
+    A=1.123720e-04, Iy=4.577744e-09, Iz=4.577744e-09, J=1.872100e-10, Sy=4.577744e-07, Sz=4.577744e-07, y_max=1.000000e-02, z_max=1.000000e-02
+    dims: d=0.0200 m, t=0.0020 m
+  Supports:
+    Frame supports (node constraints):
+      x=1.368 m, node=N20, type=111111, R(F)=[-0.000, -0.000, -42707.639] N, R(M)=[-0.000, -0.000, -0.000] Nm
+    LoadedBeam supports (1D extraction):
+      x=1.368 m, type=111111, reactions: Fx=-12169.078
+  Loads:
+    PointForce at x=0.000 m: F=[12169.078, 0.000, 0.000] N
+  Utilisation (direct frame analysis):
+    Bending[1]: 0.000
+    Bending[2]: 0.000
+    Governing: 0.000

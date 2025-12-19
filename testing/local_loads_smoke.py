@@ -42,10 +42,14 @@ def main() -> None:
     r0 = loaded.reactions[frame.get_member("M1").start_node_id]
     print("Reactions at fixed end [Fx,Fy,Fz,Mx,My,Mz] =", np.round(r0, 6))
 
-    beams = loaded.to_loaded_beams()
-    lb = beams["M1"]
-    # Check that beam loadcase has the point moment we injected
-    print("Beam moments (x, [T,My,Mz]) =", [(m.x, np.round(m.moment, 6)) for m in lb.loads.moments])
+    # Get action profile directly from frame analysis instead of extraction
+    profile = loaded.demand_provider.actions("M1", points=201)
+    print("Bending moments (midspan):")
+    print(f"  My = {profile.bending_y.action.at(1.0):.3f} Nm")
+    print(f"  Mz = {profile.bending_z.action.at(1.0):.3f} Nm")
+    print(f"Shear (midspan):")
+    print(f"  Vz = {profile.shear_z.action.at(1.0):.3f} N")
+
 
 
 if __name__ == "__main__":

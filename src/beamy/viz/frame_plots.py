@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional, Tuple, TYPE_CHECKING
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 
@@ -177,18 +177,19 @@ def plot_frame(
     for nid, pos in node_pos.items():
         node = loaded_frame.frame.nodes[nid]
         if node.support:
-            # Constrained node: red dot with constraint label
+            # Constrained node: red dot with constraint label (inline)
             ax.scatter([pos[0]], [pos[1]], [pos[2]], c='red', marker='o', s=80, zorder=10)
             # Format constraint as 6-digit string (translations + rotations)
-            constraint_label = node.support[:3]  # Show only translation constraints for clarity
+            constraint_label = str(node.support)
             ax.text(pos[0], pos[1], pos[2], f'  {constraint_label}', fontsize=9, color='red', weight='bold')
         else:
             # Free node: small black dot
             ax.scatter([pos[0]], [pos[1]], [pos[2]], c='black', marker='o', s=40, zorder=10)
-        
-        if show_node_ids:
-            offset = pos[2] * 0.05 if node.support else pos[2] * 0.08
-            ax.text(pos[0], pos[1], pos[2] + offset, nid, fontsize=8, ha='center', color='gray')
+            
+            # Label free nodes only (constrained nodes already have their support code displayed)
+            if show_node_ids:
+                offset = pos[2] * 0.08
+                ax.text(pos[0], pos[1], pos[2] + offset, nid, fontsize=8, ha='center', color='gray')
     
     # Plot member IDs at midpoints
     if show_member_ids:
@@ -370,36 +371,111 @@ def plot_von_mises(
     loaded_frame: LoadedFrame, points_per_member: int = 50, colormap: str = "turbo",
     show_colorbar: bool = True, stress_limits: Optional[Tuple[float, float]] = None, save_path: Optional[str] = None
 ) -> None:
-    """Plot frame colored by Von Mises stress."""
+    """Plot frame colored by Von Mises stress.
+    
+    Uses original (unsplit) members to ensure continuous stress distribution
+    even when members are split at intermediate nodes.
+    """
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
     node_pos = loaded_frame.frame.node_positions
-    
-    # Collect stress data for all members
-    all_stresses = []
-    member_data = {}
-    for m in loaded_frame.frame.members:
-        res = loaded_frame.get_member_results(m.id)
-        stresses = [res.von_mises.at(x) for x in np.linspace(0, m.length, points_per_member)]
-        member_data[m.id] = stresses
-        all_stresses.extend(stresses)
-    
-    vmin, vmax = stress_limits if stress_limits else (min(all_stresses), max(all_stresses))
-    norm = Normalize(vmin=vmin, vmax=vmax)
+
+    # Build a single 3D line collection for performance and to avoid slow/fragile autoscaling.
+    segments_list = []
+    seg_stresses_list = []
+
+    # Iterate over ORIGINAL members (not segments) for continuous stress plots
+    for m in loaded_frame.original_frame.members:
+        # Get member start/end positions from original frame
+        s = np.asarray(loaded_frame.original_frame.get_node(m.start_node_id).position, dtype=float)
+        e = np.asarray(loaded_frame.original_frame.get_node(m.end_node_id).position, dtype=float)
+
+        # Get continuous action profile using demand_provider which stitches segments
+        try:
+            profile = loaded_frame.demand_provider.actions(m.id, points=points_per_member)
+            xs = profile.axial._x
+            
+            # Compute von Mises stress from the profile actions
+            # Section properties
+            A = m.section.A
+            Iy = m.section.Iy
+            Iz = m.section.Iz
+            J = m.section.J
+            y_max = m.section.y_max
+            z_max = m.section.z_max
+            r_max = max(abs(y_max), abs(z_max))
+            
+            N = profile.axial._values
+            Vy = profile.shear_y._values
+            Vz = profile.shear_z._values
+            T = profile.torsion._values
+            My = profile.bending_y._values
+            Mz = profile.bending_z._values
+            
+            # Axial stress
+            sigma_axial = N / A if A > 0 else np.zeros_like(N)
+            # Bending stress (max at extreme fiber)
+            sigma_bending_y = np.abs(My) * z_max / Iy if Iy > 0 else np.zeros_like(My)
+            sigma_bending_z = np.abs(Mz) * y_max / Iz if Iz > 0 else np.zeros_like(Mz)
+            sigma = np.abs(sigma_axial) + sigma_bending_y + sigma_bending_z
+            # Shear stress
+            tau_shear = (np.abs(Vy) + np.abs(Vz)) / A if A > 0 else np.zeros_like(Vy)
+            tau_torsion = np.abs(T) * r_max / J if J > 0 else np.zeros_like(T)
+            tau = tau_shear + tau_torsion
+            # Von Mises
+            stresses = np.sqrt(sigma**2 + 3 * tau**2)
+        except Exception as e:
+            # Skip members that fail (e.g., cables, trusses)
+            continue
+
+        t_vals = xs / float(m.length) if float(m.length) > 0 else np.linspace(0.0, 1.0, len(xs))
+        pts = (1.0 - t_vals)[:, None] * s + t_vals[:, None] * e
+
+        # (n-1, 2, 3) segments
+        segments_list.append(np.stack([pts[:-1], pts[1:]], axis=1))
+        seg_stresses_list.append(0.5 * (stresses[:-1] + stresses[1:]))
+
+    if not segments_list:
+        return
+
+    segments = np.concatenate(segments_list, axis=0)
+    seg_stresses = np.concatenate(seg_stresses_list, axis=0)
+    finite_stress_mask = np.isfinite(seg_stresses)
+
+    if stress_limits is not None:
+        vmin, vmax = float(stress_limits[0]), float(stress_limits[1])
+    else:
+        finite_vals = seg_stresses[finite_stress_mask]
+        if finite_vals.size:
+            vmin, vmax = float(np.min(finite_vals)), float(np.max(finite_vals))
+        else:
+            vmin, vmax = 0.0, 1.0
+
+    if not np.isfinite(vmin):
+        vmin = 0.0
+    if (not np.isfinite(vmax)) or vmax <= vmin:
+        vmax = vmin + 1.0
+
+    norm = Normalize(vmin=vmin, vmax=vmax, clip=True)
     cmap = plt.get_cmap(colormap)
-    
-    # Plot members colored by stress (higher resolution for smooth gradients)
-    for m in loaded_frame.frame.members:
-        s, e = node_pos[m.start_node_id], node_pos[m.end_node_id]
-        stresses = member_data[m.id]
-        t_vals = np.linspace(0, 1, points_per_member)
-        
-        for i in range(len(t_vals)-1):
-            p1 = (1-t_vals[i])*s + t_vals[i]*e
-            p2 = (1-t_vals[i+1])*s + t_vals[i+1]*e
-            avg_stress = (stresses[i] + stresses[i+1]) / 2
-            color = cmap(norm(avg_stress))
-            ax.plot([p1[0], p2[0]], [p1[1], p2[1]], [p1[2], p2[2]], color=color, lw=3.5)
+
+    safe_stress = np.where(finite_stress_mask, seg_stresses, vmin)
+    colors = cmap(norm(safe_stress))
+
+    lc = Line3DCollection(segments, colors=colors, linewidths=3.5)
+    ax.add_collection3d(lc)
+
+    # Set axis limits from node coordinates (prevents inf limits from bad autoscale).
+    pts_all = np.array(list(node_pos.values()), dtype=float)
+    finite_pts = pts_all[np.all(np.isfinite(pts_all), axis=1)]
+    if finite_pts.size:
+        mins = finite_pts.min(axis=0)
+        maxs = finite_pts.max(axis=0)
+        span = maxs - mins
+        pad = float(0.05 * np.max(span)) if float(np.max(span)) > 0 else 1.0
+        ax.set_xlim(float(mins[0] - pad), float(maxs[0] + pad))
+        ax.set_ylim(float(mins[1] - pad), float(maxs[1] + pad))
+        ax.set_zlim(float(mins[2] - pad), float(maxs[2] + pad))
     
     if show_colorbar:
         cbar = plt.colorbar(ScalarMappable(cmap=cmap, norm=norm), ax=ax, shrink=0.5, pad=0.1)
@@ -428,26 +504,27 @@ def plot_results(loaded_frame: LoadedFrame, result_type: str = "von_mises", **kw
         raise ValueError(f"Invalid result_type: {result_type}")
 
 def plot_member_diagrams(loaded_frame: LoadedFrame, member_id: str, save_path: Optional[str] = None) -> None:
-    """Plot internal force diagrams for a specific member."""
-    res = loaded_frame.get_member_results(member_id)
+    """Plot internal force diagrams for a specific member using direct frame analysis."""
+    # Use demand_provider for continuous results across split members
+    profile = loaded_frame.demand_provider.actions(member_id, points=201)
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     
-    def _plot(ax, data, title, ylabel, label=None, c='b'):
-        ax.plot([x for x, _ in data], [v for _, v in data], c, lw=2, label=label)
+    def _plot(ax, xs, vals, title, ylabel, label=None, c='b'):
+        ax.plot(xs, vals, c, lw=2, label=label)
         ax.axhline(0, color='k', ls='--', lw=0.5, alpha=0.5)
         ax.set_title(title)
         ax.set_ylabel(ylabel)
         ax.set_xlabel('Position (m)')
         ax.grid(True, alpha=0.3)
     
-    _plot(axes[0,0], res.axial.action, 'Axial Force', 'N (N)')
-    _plot(axes[0,1], res.shear_y.action, 'Shear Force', 'V (N)', 'Vy', 'r')
-    _plot(axes[0,1], res.shear_z.action, '', '', 'Vz', 'g')
+    _plot(axes[0,0], profile.axial._x, profile.axial._values, 'Axial Force', 'N (N)')
+    _plot(axes[0,1], profile.shear_y._x, profile.shear_y._values, 'Shear Force', 'V (N)', 'Vy', 'r')
+    _plot(axes[0,1], profile.shear_z._x, profile.shear_z._values, '', '', 'Vz', 'g')
     axes[0,1].legend()
-    _plot(axes[1,0], res.bending_y.action, 'Bending Moment', 'M (N·m)', 'My', 'r')
-    _plot(axes[1,0], res.bending_z.action, '', '', 'Mz', 'g')
+    _plot(axes[1,0], profile.bending_y._x, profile.bending_y._values, 'Bending Moment', 'M (N·m)', 'My', 'r')
+    _plot(axes[1,0], profile.bending_z._x, profile.bending_z._values, '', '', 'Mz', 'g')
     axes[1,0].legend()
-    _plot(axes[1,1], res.torsion.action, 'Torsion', 'T (N·m)', c='m')
+    _plot(axes[1,1], profile.torsion._x, profile.torsion._values, 'Torsion', 'T (N·m)', c='m')
     
     fig.suptitle(f'Member {member_id} - Internal Forces', fontsize=13, weight='bold')
     plt.tight_layout()
@@ -463,11 +540,13 @@ def plot_aisc_utilization(
     loaded_frame: LoadedFrame,
     show_node_ids: bool = True,
     save_path: Optional[str] = None,
-    colormap: str = "RdYlGn_r"
+    colormap: str = "RdYlGn_r",
+    **kwargs,  # Accept but ignore legacy options like utilization_source
 ) -> None:
     """
-    Plot frame with members colored by AISC Chapter F utilization ratio.
+    Plot frame with members colored by AISC utilization ratio.
     
+    Uses direct frame analysis (MemberActionProfile) for consistent and correct results.
     Green = low utilization, Yellow = moderate, Red = high (approaching 1.0).
     For split members, uses the utilization of the original member (combined segments).
     Only one label is shown per original member (at the midpoint of the full member).
@@ -475,7 +554,8 @@ def plot_aisc_utilization(
     fig = plt.figure(figsize=(12, 9))
     ax = fig.add_subplot(111, projection='3d')
     
-    # Get AISC utilizations for all members
+    # Always use direct frame analysis method (get_aisc_utilizations)
+    # This uses MemberActionProfile from demand_provider, NOT to_loaded_beam() re-solve
     utilizations = loaded_frame.get_aisc_utilizations()
     
     if not utilizations:
@@ -483,7 +563,7 @@ def plot_aisc_utilization(
         return
     
     # Normalize utilizations for colormap
-    util_values = list(utilizations.values())
+    util_values = [v for v in utilizations.values() if v > 0]
     max_util = max(util_values) if util_values else 1.0
     
     # Use max(max_util, 1.0) to ensure the scale goes at least to 1.0
@@ -501,15 +581,11 @@ def plot_aisc_utilization(
         seg_id = member.id
         s, e = node_pos[member.start_node_id], node_pos[member.end_node_id]
         
-        # For split members, look up the parent (original) member's utilization
-        # The utilizations dict has original member IDs when members are bundled
-        if seg_id in loaded_frame._member_segment_parent:
-            parent_id = loaded_frame._member_segment_parent[seg_id]
-            util = utilizations.get(parent_id, 0.0)
-        else:
-            # Not a split member or no bundling info; use segment ID directly
-            parent_id = seg_id
-            util = utilizations.get(seg_id, 0.0)
+        # Determine the parent member ID (for bundled/split members)
+        parent_id = loaded_frame._member_segment_parent.get(seg_id, seg_id)
+        
+        # Look up utilization from the utilizations dict
+        util = utilizations.get(parent_id, 0.0)
         
         color = cmap(norm(util))
         
@@ -518,7 +594,7 @@ def plot_aisc_utilization(
         # Add text label only once per original member (at full member midpoint)
         if parent_id not in labeled_parents:
             labeled_parents.add(parent_id)
-            # Get full member midpoint using original frame
+            # Get full member midpoint using original frame if available
             try:
                 parent = loaded_frame.original_frame.get_member(parent_id)
                 parent_start = loaded_frame.original_frame.get_node(parent.start_node_id).position
@@ -526,7 +602,7 @@ def plot_aisc_utilization(
                 mid = (parent_start + parent_end) / 2
             except:
                 mid = (s + e) / 2
-            ax.text(mid[0], mid[1], mid[2], f'{util:.2f}', fontsize=8, ha='center',
+            ax.text(mid[0], mid[1], mid[2], f'{util:.3f}', fontsize=8, ha='center',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
     
     # Plot nodes and constraints
@@ -541,7 +617,8 @@ def plot_aisc_utilization(
         
         if show_node_ids:
             offset = pos[2] * 0.05 if node.support else pos[2] * 0.08
-            ax.text(pos[0], pos[1], pos[2] + offset, nid, fontsize=8, ha='center', color='gray')
+            label = str(node.support) if node.support else nid
+            ax.text(pos[0], pos[1], pos[2] + offset, label, fontsize=8, ha='center', color='gray')
     
     # Add colorbar
     sm = ScalarMappable(cmap=cmap, norm=norm)

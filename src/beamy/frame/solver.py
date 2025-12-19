@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 import numpy as np
+import warnings
 
 from ..core.math import build_local_stiffness_matrix, build_transformation_matrix_12x12
 from .frame import Frame
@@ -9,6 +10,9 @@ from .member import Member
 
 
 MemberStiffnessMatrices = Dict[str, Tuple[np.ndarray, np.ndarray]]
+
+
+NodalSpringStiffnesses = List[Tuple[str, np.ndarray]]
 
 
 @dataclass(frozen=True)
@@ -49,15 +53,15 @@ def build_local_truss_stiffness_matrix(L: float, E: float, A: float, axial_scale
 
 def apply_releases(k_local: np.ndarray, releases: str) -> np.ndarray:
     """
-    Apply member end releases to local stiffness matrix.
-    
+    Apply member end releases by static condensation (not zeroing rows/cols).
+
     Releases is a 12-character string of '0' and '1':
     - First 6 chars: start node [UX, UY, UZ, RX, RY, RZ]
     - Last 6 chars: end node [UX, UY, UZ, RX, RY, RZ]
     - '0' = connected (rigid), '1' = released (free)
-    
-    When a DOF is released, that DOF cannot transfer forces/moments.
-    We zero out the corresponding rows and columns in the stiffness matrix.
+
+    We condense out released DOFs. Prefer a direct solve when k_ff is well
+    conditioned; fall back to pseudo-inverse (with a warning) if needed.
     """
     released = [i for i, release_char in enumerate(releases) if release_char == "1"]
     if not released:
@@ -70,11 +74,23 @@ def apply_releases(k_local: np.ndarray, releases: str) -> np.ndarray:
     k_fr = k_local[np.ix_(released, retained)]
     k_ff = k_local[np.ix_(released, released)]
 
-    if k_ff.size == 0:
-        k_condensed = k_rr
-    else:
-        k_ff_inv = np.linalg.pinv(k_ff)
-        k_condensed = k_rr - k_rf @ k_ff_inv @ k_fr
+    k_condensed = k_rr
+    if k_ff.size != 0:
+        # Try a direct solve when k_ff is reasonably conditioned.
+        try:
+            cond = np.linalg.cond(k_ff)
+            if np.isfinite(cond) and cond < 1e12:
+                sol = np.linalg.solve(k_ff, k_fr)
+                k_condensed = k_rr - k_rf @ sol
+            else:
+                raise np.linalg.LinAlgError("k_ff is poorly conditioned")
+        except np.linalg.LinAlgError:
+            k_ff_pinv = np.linalg.pinv(k_ff)
+            k_condensed = k_rr - k_rf @ k_ff_pinv @ k_fr
+            warnings.warn(
+                "apply_releases: k_ff poorly conditioned; used pseudo-inverse for condensation",
+                RuntimeWarning,
+            )
 
     k_modified = np.zeros_like(k_local)
     for i, gi in enumerate(retained):
@@ -88,6 +104,7 @@ def analyze_frame_geometry(
     node_to_idx: Dict[str, int],
     member_axial_scales: Optional[Dict[str, float]] = None,
     member_stiffness_scales: Optional[Dict[str, ElementStiffnessScales]] = None,
+    nodal_spring_stiffnesses: Optional[NodalSpringStiffnesses] = None,
 ) -> Tuple[np.ndarray, MemberStiffnessMatrices]:
     """Assemble the global stiffness matrix for a frame.
 
@@ -144,6 +161,17 @@ def analyze_frame_geometry(
                 K_global[dof_indices[i], dof_indices[j]] += k_global[i, j]
         
         member_matrices[member.id] = (k_local, T)
+
+    # Add nodal spring stiffness (global axes).
+    if nodal_spring_stiffnesses:
+        for nid, K6 in nodal_spring_stiffnesses:
+            if nid not in node_to_idx:
+                raise KeyError(f"Unknown node '{nid}' for nodal spring")
+            K6 = np.asarray(K6, dtype=float)
+            if K6.shape != (6, 6):
+                raise ValueError(f"Nodal spring stiffness for '{nid}' must be (6,6), got {K6.shape}")
+            base = node_to_idx[nid] * 6
+            K_global[base : base + 6, base : base + 6] += K6
         
     return K_global, member_matrices
 
@@ -153,6 +181,7 @@ def assemble_global_stiffness(
     node_to_idx: Dict[str, int],
     member_axial_scales: Optional[Dict[str, float]] = None,
     member_stiffness_scales: Optional[Dict[str, ElementStiffnessScales]] = None,
+    nodal_spring_stiffnesses: Optional[NodalSpringStiffnesses] = None,
 ) -> Tuple[np.ndarray, MemberStiffnessMatrices]:
     """Public wrapper with a clearer name.
 
@@ -165,6 +194,7 @@ def assemble_global_stiffness(
         node_to_idx,
         member_axial_scales=member_axial_scales,
         member_stiffness_scales=member_stiffness_scales,
+        nodal_spring_stiffnesses=nodal_spring_stiffnesses,
     )
 
 def solve_displacements(K_global: np.ndarray, F_global: np.ndarray, fixed_dofs: List[int]) -> np.ndarray:
@@ -191,6 +221,7 @@ def recover_member_end_forces(
     node_to_idx: Dict[str, int],
     d_global: np.ndarray,
     member_matrices: MemberStiffnessMatrices,
+    member_fixed_end_forces: Optional[Dict[str, np.ndarray]] = None,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Tuple[np.ndarray, np.ndarray]]]:
     """Recover nodal displacements and member end forces from a solved displacement vector.
 
@@ -201,6 +232,8 @@ def recover_member_end_forces(
     Member end forces are stored in *local* axes as two 6-vectors:
         start = [Fx, Fy, Fz, Mx, My, Mz]
         end   = [Fx, Fy, Fz, Mx, My, Mz]
+    member_fixed_end_forces (optional) are 12-vectors of equivalent nodal
+    loads in local axes (start DOFs first). Physical end forces are k*u - f_eq.
     """
 
     node_ids = sorted(frame.nodes.keys())
@@ -214,10 +247,57 @@ def recover_member_end_forces(
             [nodal_displacements[member.start_node_id], nodal_displacements[member.end_node_id]]
         )
         k_l, T = member_matrices[member.id]
-        f_m_l = k_l @ (T @ d_m_g)
+        f_eq_l = np.zeros(12) if member_fixed_end_forces is None else member_fixed_end_forces.get(member.id, np.zeros(12))
+        f_m_l = k_l @ (T @ d_m_g) - f_eq_l
         member_end_forces[member.id] = (f_m_l[0:6], f_m_l[6:12])
 
     return nodal_displacements, member_end_forces
+
+
+def assemble_internal_nodal_forces(
+    frame: Frame,
+    node_to_idx: Dict[str, int],
+    member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]],
+    member_matrices: MemberStiffnessMatrices,
+    d_global: Optional[np.ndarray] = None,
+    nodal_spring_stiffnesses: Optional[NodalSpringStiffnesses] = None,
+) -> np.ndarray:
+    """Assemble internal nodal force vector (global axes) from member end forces.
+
+    Uses physical member end forces (local) and the transformation matrices used
+    in stiffness assembly. Returns a global DOF vector where free DOFs carry the
+    unbalanced internal force contribution from connected members.
+    """
+
+    n_dofs = 6 * len(frame.nodes)
+    fint = np.zeros(n_dofs)
+
+    for member in frame.members:
+        if member.id not in member_end_forces:
+            continue
+        start_f, end_f = member_end_forces[member.id]
+        f_local = np.concatenate([start_f, end_f])
+
+        _k_l, T = member_matrices[member.id]
+        f_global = T.T @ f_local
+
+        s_idx = node_to_idx[member.start_node_id] * 6
+        e_idx = node_to_idx[member.end_node_id] * 6
+        dof_indices = list(range(s_idx, s_idx + 6)) + list(range(e_idx, e_idx + 6))
+        fint[dof_indices] += f_global
+
+    # Add spring resisting forces: f_s = K u (global axes).
+    if nodal_spring_stiffnesses:
+        if d_global is None:
+            raise ValueError("d_global is required when nodal_spring_stiffnesses are provided")
+        for nid, K6 in nodal_spring_stiffnesses:
+            if nid not in node_to_idx:
+                raise KeyError(f"Unknown node '{nid}' for nodal spring")
+            base = node_to_idx[nid] * 6
+            u = d_global[base : base + 6]
+            fint[base : base + 6] += np.asarray(K6, dtype=float) @ u
+
+    return fint
 
 
 def build_local_geometric_stiffness_matrix(L: float, N: float) -> np.ndarray:

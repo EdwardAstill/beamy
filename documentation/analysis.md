@@ -35,15 +35,33 @@ That lets member checks (AISC Chapter E/F/H, future EC3/AS checks) consume deman
 
 beamy has two closely related analysis layers:
 
-1. **Beam1D** analysis (Euler–Bernoulli beam theory), used for single members.
+1. **Beam1D** analysis (Euler–Bernoulli beam theory), used for single members in isolation.
 2. **Frame** analysis (3D frame), used to solve connected structures with 6 DOFs per node.
 
-The stability upgrades described here are primarily about **frame analysis**.
+The current implementation prioritizes **direct frame analysis** as the canonical approach:
 
-Key intent:
+**Key principle:**
 
-- Frame analysis becomes the authoritative source for member demands (axial force, end moments, shears).
-- Member design checks should rely on those demands (and on explicit restraint inputs), rather than re-solving each member with “invented” boundary conditions.
+> Frame analysis is the authoritative source for member demands. Member design checks consume those demands directly via equilibrium without re-solving members as isolated beams.
+
+This ensures:
+- **Consistency**: all checks use the same demand source (frame-recovered end forces + distributed loads)
+- **Correctness**: symmetric members yield symmetric demands (no artificial boundary condition asymmetries)
+- **Efficiency**: no redundant 1D FEM solves; demands computed via equilibrium
+
+### Demand computation path (Direct Frame Analysis)
+
+For each member, beamy:
+1. Recovers end forces from the frame analysis (local axes)
+2. Collects distributed loads applied to that member (converted to local coordinates if needed)
+3. Computes internal actions (N, V, M) at arbitrary points using equilibrium without re-solving
+4. Assembles a `MemberActionProfile` for use in design checks
+
+This approach automatically handles:
+- Members split at intermediate nodes (stitches segments seamlessly)
+- Linearly varying distributed loads
+- Asymmetric member orientations and end conditions
+- Symmetric structures with symmetric results
 
 ---
 

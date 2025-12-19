@@ -180,9 +180,10 @@ def build_frame_and_loads(
         fb.add("SL3", _mm(1450, 750, 1775), lift_pt, sling_section, sling_mat, element_type="cable")
         fb.add("SL4", _mm(1450, 1750, 1775), lift_pt, sling_section, sling_mat, element_type="cable")
         
-        # Lift point support (lift point is a member end, so it is a real node)
+        # Lift point support: fully fixed (111111) to represent an external anchor/hook
+        # All 6 DOFs are constrained (3 translations + 3 rotations)
         if support_mode == "lifted":
-            fb.support_at(lift_pt, "101000")  # Ux + Uz fixed
+            fb.support_at(lift_pt, "111111")
 
     # === SUPPORTS ===
     if support_mode == "elevated":
@@ -191,9 +192,12 @@ def build_frame_and_loads(
         fb.support_at(_mm(125, 0, 0), "111111")
         fb.support_at(_mm(1925, 2500, 0), "111111")
     else:  # lifted
-        # Only two base nodes fixed in X/Y (Z free for lifting)
-        fb.support_at(_mm(125, 0, 0), "110000")
-        fb.support_at(_mm(1925, 2500, 0), "110000")
+        # All four base corners fixed in X/Y (Z free for lifting)
+        # This provides symmetric restraint so C1 and C2 see identical boundary conditions
+        fb.support_at(_mm(125, 0, 0), "110000")       # corner: x_min, y_min
+        fb.support_at(_mm(125, 2500, 0), "110000")    # corner: x_min, y_max
+        fb.support_at(_mm(1925, 0, 0), "110000")      # corner: x_max, y_min
+        fb.support_at(_mm(1925, 2500, 0), "110000")   # corner: x_max, y_max
 
     # Build frame (coord mapping no longer needed)
     frame = fb.build()
@@ -272,32 +276,23 @@ def run_case(
         return f"[{float(v[0]):.3f}, {float(v[1]):.3f}, {float(v[2]):.3f}]"
 
     def _write_members_info(members_file: Path, case_label: str, loaded_frame: LoadedFrame) -> None:
-        try:
-            beams = loaded_frame.to_loaded_beams()
-        except Exception as e:
-            print(f"Warning: could not build LoadedBeams for members: {e}")
-            return
-
+        """Write per-member analysis results using direct frame analysis."""
         with members_file.open("a", encoding="utf-8") as f:
             f.write(f"\n=== {case_label} ===\n")
-            f.write(f"Members: {len(beams)}\n")
+            f.write(f"Members: {len(loaded_frame.original_frame.members)}\n")
+            
             # Iterate deterministically
-            for mid in sorted(beams.keys()):
-                lb = beams[mid]
-                # Resolve original member for metadata
-                try:
-                    orig = loaded_frame.original_frame.get_member(mid)
-                except Exception:
-                    orig = loaded_frame.frame.get_member(mid)
-
+            for mid in sorted([m.id for m in loaded_frame.original_frame.members]):
+                orig = loaded_frame.original_frame.get_member(mid)
+                
                 # Header
                 f.write(f"\nMember {mid} (type={orig.element_type})\n")
                 f.write(f"  Length: {orig.length:.3f} m\n")
                 # Material
-                mat = lb.beam.material
+                mat = orig.material
                 f.write(f"  Material: {mat.name}, E={mat.E:.3e} Pa, G={mat.G:.3e} Pa, Fy={(mat.Fy or 0.0):.3e} Pa\n")
                 # Section
-                sec = lb.beam.section
+                sec = orig.section
                 f.write(f"  Section: {getattr(sec, 'name', 'unknown')}\n")
                 props = []
                 for k in ("A", "Iy", "Iz", "J", "Sy", "Sz", "y_max", "z_max"):
@@ -340,170 +335,65 @@ def run_case(
                 except Exception:
                     pass
 
-                # LoadedBeam supports (1D extraction)
-                f.write("    LoadedBeam supports (1D extraction):\n")
-                lb_supports = [s for s in getattr(lb.beam, "supports", []) if isinstance(s, Support)]
-                if not lb_supports:
-                    f.write("      (none)\n")
-                else:
-                    for s in lb_supports:
-                        rxn = s.reactions
-                        nz = {k: float(v) for k, v in rxn.items() if abs(float(v)) > 1e-9}
-                        rxn_str = ", ".join([f"{k}={v:.3f}" for k, v in nz.items()]) if nz else "(none)"
-                        f.write(f"      x={s.x:.3f} m, type={s.type}, reactions: {rxn_str}\n")
+                # AISC utilisation using DIRECT FRAME ANALYSIS method (MemberActionProfile)
+                # This uses equilibrium from recovered frame end forces + distributed loads,
+                # NOT re-solving each member as a 1D beam with extracted boundary conditions.
+                from beamy.checks import aisc_9
+                from beamy.frame.results import MemberActionProfile
 
-                # Loads
-                f.write("  Loads:\n")
-                # Point forces
-                if lb.loads.point_forces:
-                    for pf in lb.loads.point_forces:
-                        x = float(pf.point[0])
-                        f.write(f"    PointForce at x={x:.3f} m: F={_fmt_vec(pf.force)} N\n")
-                # Moments
-                if lb.loads.moments:
-                    for m in lb.loads.moments:
-                        f.write(f"    Moment at x={float(m.x):.3f} m: M={_fmt_vec(m.moment)} Nm\n")
-                # Distributed
-                if lb.loads.dist_forces:
-                    for df in lb.loads.dist_forces:
-                        xs = float(df.start_position[0])
-                        xe = float(df.end_position[0])
-                        f.write(
-                            "    DistForce from x="
-                            + f"{xs:.3f} to {xe:.3f} m: w_start={_fmt_vec(df.start_force)} N/m, "
-                            + f"w_end={_fmt_vec(df.end_force)} N/m\n"
-                        )
-
-                # AISC Chapter F utilisation
                 util_overall = 0.0
                 util_bend = []
                 util_shear = 0.0
                 util_comp_e = 0.0
+                util_interaction_h = 0.0
+
                 try:
-                    check = lb.check_aisc_chapter_f(length_unit="m", force_unit="N")
+                    # Get action profile directly from frame analysis
+                    profile = loaded_frame.demand_provider.actions(mid, points=201)
+
+                    # Run AISC 9 check on the profile (Chapter F: bending + shear)
+                    check = aisc_9.aisc_9_check(profile, length_unit="m", force_unit="N")
                     util_overall = float(check.utilisation)
                     util_bend = [float(b.utilisation) for b in check.bending]
                     util_shear = float(check.shear.utilisation)
-                except Exception:
-                    # Fallback to frame-derived utilisations
-                    try:
-                        util_map = loaded_frame.get_aisc_utilizations()
-                        util_overall = float(util_map.get(mid, 0.0))
-                    except Exception:
-                        util_overall = 0.0
 
-                f.write("  Utilisation:\n")
+                    # Run AISC Chapter E check (axial compression) on the profile
+                    try:
+                        check_e = aisc_9.aisc_chapter_e_check(profile, length_unit="m", force_unit="N", K=1.0)
+                        util_comp_e = float(check_e.utilisation)
+                    except Exception:
+                        util_comp_e = 0.0
+
+                    # Run AISC Chapter H check (combined axial + bending) on the profile
+                    try:
+                        check_h = aisc_9.aisc_chapter_h_check(profile, length_unit="m", force_unit="N", frame_type="braced")
+                        util_interaction_h = float(check_h.utilisation)
+                    except Exception:
+                        util_interaction_h = 0.0
+
+                except Exception as e:
+                    # Fallback (should not happen)
+                    f.write(f"    (direct analysis error: {e})\n")
+
+                f.write("  Utilisation (direct frame analysis):\n")
                 if util_bend:
                     for i, u in enumerate(util_bend, start=1):
                         f.write(f"    Bending[{i}]: {u:.3f}\n")
                 if util_shear:
                     f.write(f"    Shear: {util_shear:.3f}\n")
-                # Optional: axial compression check per AISC Chapter E
-                try:
-                    check_e = lb.check_aisc_chapter_e(length_unit="m", force_unit="N")
-                    util_comp_e = float(check_e.utilisation)
-                except Exception:
-                    util_comp_e = 0.0
                 if util_comp_e > 1e-3:
                     f.write(f"    Compression (Chap E): {util_comp_e:.3f}\n")
-                governing = max(util_overall, util_comp_e)
+                if util_interaction_h > 1e-3:
+                    f.write(f"    Interaction (Chap H): {util_interaction_h:.3f}\n")
+                governing = max(util_overall, util_comp_e, util_interaction_h)
                 f.write(f"    Governing: {governing:.3f}\n")
+
 
     members_file = output_dir.parent / "members.txt"
     _ensure_dir(members_file.parent)
     _write_members_info(members_file, f"{spec.name} ({support_mode})", loaded)
 
-    # Extract P1 (first vertical post) as a loaded beam and analyze it
-    print("\n" + "=" * 70)
-    print("EXTRACTED BEAM ANALYSIS: Post P1")
-    print("=" * 70)
-    try:
-        loaded_beam = loaded.to_loaded_beam("P1")
-        print(f"Extracted P1 as LoadedBeam (L={loaded_beam.beam.L:.3f} m)")
-        print(f"Loads: {loaded_beam.loads}")
-        
-        # Analyze deflection at midpoint and tip
-        mid_x = loaded_beam.beam.L / 2.0
-        tip_x = loaded_beam.beam.L
-        
-        # Get deflections from loaded beam analysis
-        uy_result = loaded_beam.deflection("y")
-        uz_result = loaded_beam.deflection("z")
-        
-        print(f"\nDeflections (1D beam analysis):")
-        print(f"  Midspan (y): {uy_result.at(mid_x)*1000:.3f} mm")
-        print(f"  Tip (y): {uy_result.at(tip_x)*1000:.3f} mm")
-        print(f"  Midspan (z): {uz_result.at(mid_x)*1000:.3f} mm")
-        print(f"  Tip (z): {uz_result.at(tip_x)*1000:.3f} mm")
-        
-        # Get bending moments
-        by_result = loaded_beam.bending("y")
-        bz_result = loaded_beam.bending("z")
-        print(f"\nBending Moments (1D beam analysis):")
-        print(f"  Midspan (My): {by_result.action.at(mid_x)/1e6:.3f} MNm")
-        print(f"  Tip (My): {by_result.action.at(tip_x)/1e6:.3f} MNm")
-        print(f"  Midspan (Mz): {bz_result.action.at(mid_x)/1e6:.3f} MNm")
-        print(f"  Tip (Mz): {bz_result.action.at(tip_x)/1e6:.3f} MNm")
-        
-        # Get shear forces
-        sy_result = loaded_beam.shear("y")
-        sz_result = loaded_beam.shear("z")
-        print(f"\nShear Forces (1D beam analysis):")
-        print(f"  Start (Vy): {sy_result.action.at(1e-3)/1e3:.3f} kN")
-        print(f"  Start (Vz): {sz_result.action.at(1e-3)/1e3:.3f} kN")
-        
-        # Compare with frame member analysis (use bundled segments if they exist)
-        seg_ids = loaded._member_bundle.get("P1", ["P1"])
-        if len(seg_ids) > 0:
-            print(f"\nFrame Member (P1) segments: {seg_ids}")
-            for seg_id in seg_ids:
-                seg_res = loaded.get_member_results(seg_id)
-                print(f"  {seg_id}: Max My = {seg_res.bending_y.abs_max/1e6:.3f} MNm, Max Mz = {seg_res.bending_z.abs_max/1e6:.3f} MNm")
-        
-        # Run AISC Chapter F check on the extracted beam
-        print(f"\nRunning AISC Chapter F Check:")
-        try:
-            check_result = loaded_beam.check_aisc_chapter_f(length_unit="m", force_unit="N")
-            # Print summary of check results
-            print(f"  Overall Pass: {all(b.utilisation < 1.0 for b in check_result.bending) and check_result.shear.pass_}")
-            for bending in check_result.bending:
-                max_util = max((s.utilisation for s in bending.segments), default=0.0)
-                print(f"  {bending.axis} axis utilization: {max_util:.3f}")
-            print(f"  Shear utilization: {check_result.shear.utilisation:.3f} (V_max = {check_result.shear.V_max:.2f}, Capacity = {check_result.shear.capacity:.2f})")
-        except Exception as check_err:
-            print(f"  Check error: {check_err}")
-        
-    except Exception as e:
-        print(f"Warning: Could not extract beam analysis: {e}")
-        import traceback
-        traceback.print_exc()
 
-    # Make plotting robust/legible for both cases
-    scale = _auto_deflection_scale_factor(loaded)
-    vm_min, vm_max = _estimate_von_mises_range_pa(loaded)
-
-    # Slings are element_type="cable", so tension-only behaviour is handled
-    # inside LoadedFrame automatically.
-
-    loaded.plot(deformed=True, scale_factor=scale, save_path=str(output_dir / "geometry.svg"))
-    loaded.plot_deflection(
-        scale_factor=scale,
-        colormap="viridis",
-        show_undeformed=True,
-        save_path=str(output_dir / "deflection.svg"),
-    )
-    loaded.plot_von_mises(
-        colormap="turbo",
-        # Using steel.Fy here can make plots look "blank" when stresses are low.
-        stress_limits=(0.0, 1.05 * vm_max),
-        save_path=str(output_dir / "von_mises.svg"),
-    )
-    loaded.plot_aisc_utilization(save_path=str(output_dir / "aisc_utilization.png"))
-
-    print(f"\nPlot scale: {scale:.2f}x (max disp = {_max_translation_displacement_m(loaded)*1000:.2f} mm)")
-    print(f"Max |Ux| = {_max_abs_component_displacement_m(loaded, 0)*1000:.3f} mm")
-    print(f"Von Mises range (Pa): min={vm_min:.3g}, max={vm_max:.3g}")
-    print(f"Saved plots to: {output_dir}")
 
 
 if __name__ == "__main__":

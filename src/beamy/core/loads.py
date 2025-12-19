@@ -86,6 +86,35 @@ class NodalMoment:
 
 
 @dataclass
+class NodalSpring:
+    """Elastic nodal spring stiffness attached to ground at a node.
+
+    K is a 6x6 stiffness matrix in the node DOF basis:
+        [Ux, Uy, Uz, Rx, Ry, Rz]
+
+    Coordinates:
+        - coords='global': K is expressed in global axes
+        - coords='local' : K is expressed in the local axes of reference_member_id
+          and will be transformed to global during analysis.
+    """
+
+    node_id: str
+    K: np.ndarray
+    coords: str = "global"
+    reference_member_id: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.K, np.ndarray):
+            self.K = np.array(self.K, dtype=float)
+        if self.K.shape != (6, 6):
+            raise ValueError(f"NodalSpring.K must be shape (6,6), got {self.K.shape}")
+        if self.coords not in ("global", "local"):
+            raise ValueError(f"coords must be 'local' or 'global', got '{self.coords}'")
+        if self.coords == "local" and not self.reference_member_id:
+            raise ValueError("reference_member_id is required when coords='local'")
+
+
+@dataclass
 class MemberPointForce:
     """Point force applied along a member in a 3D frame."""
     member_id: str
@@ -282,6 +311,7 @@ class FrameLoadCase:
     member_distributed_forces: List[MemberDistributedForce] = field(default_factory=list)
     member_point_supports: List[MemberPointSupport] = field(default_factory=list)
     member_supports: List[MemberSupport] = field(default_factory=list)
+    nodal_springs: List[NodalSpring] = field(default_factory=list)
     
     def add_nodal_force(
         self,
@@ -337,11 +367,20 @@ class FrameLoadCase:
     def add_member_point_support(self, member_id: str, position: float, support: str, position_type: str = "absolute") -> None:
         self.member_point_supports.append(MemberPointSupport(member_id=member_id, position=position, support=support, position_type=position_type))
 
+    def add_nodal_spring(
+        self,
+        node_id: str,
+        K: np.ndarray,
+        coords: str = "global",
+        reference_member_id: Optional[str] = None,
+    ) -> None:
+        self.nodal_springs.append(NodalSpring(node_id=node_id, K=K, coords=coords, reference_member_id=reference_member_id))
+
     def support_member(self, member_id: str, support: str) -> None:
         self.member_supports.append(MemberSupport(member_id=member_id, support=support))
 
     def __repr__(self) -> str:
-        n_nodal = len(self.nodal_forces) + len(self.nodal_moments)
+        n_nodal = len(self.nodal_forces) + len(self.nodal_moments) + len(self.nodal_springs)
         n_member = (
             len(self.member_point_forces)
             + len(self.member_point_moments)

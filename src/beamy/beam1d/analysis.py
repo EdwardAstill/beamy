@@ -203,6 +203,38 @@ class LoadedBeam:
             compression_sign=compression_sign,
         )
 
+    def check_aisc_chapter_h(
+        self,
+        length_unit,
+        force_unit,
+        *,
+        Ky: float = 1.0,
+        Kz: float = 1.0,
+        unbraced_positions_y: Any = None,
+        unbraced_positions_z: Any = None,
+        Cmx: Any = None,
+        Cmy: Any = None,
+        frame_type: str = "braced",
+        has_transverse_loading: bool = True,
+        compression_sign: str = "negative",
+    ) -> Any:
+        from ..checks import aisc_9
+        return self.check(
+            aisc_9,
+            chapter="h",
+            length_unit=length_unit,
+            force_unit=force_unit,
+            Ky=Ky,
+            Kz=Kz,
+            unbraced_positions_y=unbraced_positions_y,
+            unbraced_positions_z=unbraced_positions_z,
+            Cmx=Cmx,
+            Cmy=Cmy,
+            frame_type=frame_type,
+            has_transverse_loading=has_transverse_loading,
+            compression_sign=compression_sign,
+        )
+
     def plot(self, **kwargs):
         from ..viz.beam_plots import plot_beam_diagram
         plot_beam_diagram(self, **kwargs)

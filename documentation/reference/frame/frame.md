@@ -127,7 +127,9 @@ class Member:
     section: Section            # Cross-section (from sectiony)
     material: Material          # Material properties
     orientation: np.ndarray     # Vector defining local y-axis direction
+    element_type: Literal["beam", "truss", "cable"] = "beam"  # Element behavior type
     releases: Optional[str] = None  # End releases (12-digit string)
+    constraints: Optional[str] = None  # Member-end constraints (12-digit string)
 ```
 
 ### Parameters
@@ -138,7 +140,12 @@ class Member:
 - `section` (Section): Cross-section properties (from sectiony library)
 - `material` (Material): Material properties (E, G, Fy)
 - `orientation` (np.ndarray): A 3D vector in global coordinates that defines the direction of the local y-axis. This vector is projected onto the plane perpendicular to the member axis to determine the actual local y-direction.
+- `element_type` (str): Element behavior type (default: "beam")
+  - `"beam"`: Full 3D beam element (all DOFs active)
+  - `"truss"`: Two-force member (only axial forces, moments released)
+  - `"cable"`: Cable element (tension-only, nonlinear)
 - `releases` (str, optional): Member end releases as a 12-digit string (see [End Releases](#end-releases))
+- `constraints` (str, optional): Member-end rigid constraints as a 12-digit string (see [Member End Constraints](#member-end-constraints))
 
 ### Computed Properties
 
@@ -176,40 +183,112 @@ Where `0` = connected (force/moment transfers) and `1` = released (force/moment 
 
 **Common Release Patterns:**
 - `None` or `"000000000000"`: Fully connected at both ends (rigid frame behavior)
-- `"000001000001"`: Pinned at both ends about z-axis (simple beam)
-- `"000001000000"`: Pinned at start only (moment release)
+- `"000001000001"`: Pinned at both ends about z-axis (simple beam, free to rotate about z)
+- `"000001000000"`: Pinned at start only
+- `"111111111111"`: All releases (isolated member - typically not physical)
+
+### Member End Constraints
+
+The `constraints` parameter is a 12-digit string constraining forces/moments at member ends relative to the global frame:
+- Digits 1-6: Start node constraints [Nx, Vy, Vz, Tx, My, Mz]
+- Digits 7-12: End node constraints [Nx, Vy, Vz, Tx, My, Mz]
+
+Where `0` = free and `1` = constrained (acts like a built-in support).
+
+**Use Case:** Member-end constraints are used for eccentric or special connection conditions that differ from typical frame joints. Not commonly used in standard frame analysis.
+
+### Element Types
+
+#### Beam Element (Default)
+
+Full 3D beam element with all 6 DOFs active at each node. Transmits:
+- All internal forces (Nx, Vy, Vz)
+- All moments (Tx, My, Mz)
+
+Affected by:
+- Bending stiffness (EI)
+- Torsional stiffness (GJ)
+- Axial stiffness (EA)
+- Shear deformation (optional)
+
+```python
+Member("beam1", "A", "B", section, steel, orientation, element_type="beam")
+```
+
+#### Truss Element
+
+Two-force member that can only transmit axial force. All moments and transverse forces are automatically released.
+
+Characteristics:
+- Forces internal to member align with member axis
+- Acts like two-force members in trusses
+- Typically much smaller rotation stiffness
+- Useful for bracing, diagonals
+
+```python
+Member("brace1", "A", "C", small_section, steel, orientation, element_type="truss")
+```
+
+#### Cable Element
+
+Tension-only element for cable/guy-wire analysis. Cannot transmit compression or bending.
+
+Characteristics:
+- Nonlinear behavior (only active in tension)
+- Forces must be along member axis (axial only)
+- Deactivates when subjected to compression
+- Useful for cable-stayed structures, suspension systems
+
+```python
+Member("cable1", "A", "D", cable_section, steel, orientation, element_type="cable")
+```
 
 ### Orientation Examples
 
 ```python
-# Vertical column - local y points in global +X direction
+# Vertical column - local y points in global +X direction (weak axis perpendicular)
 column = Member(
     id="col1",
     start_node_id="A", 
     end_node_id="B",
     section=w_section,
     material=steel,
-    orientation=np.array([1.0, 0.0, 0.0])  # y-axis → global X
+    orientation=np.array([1.0, 0.0, 0.0]),  # y-axis → global X
+    element_type="beam"
 )
 
-# Horizontal beam in XZ plane - local y points up (global +Z)
+# Horizontal beam in XZ plane - local y points up (global +Z) for strong-axis bending
 beam = Member(
     id="beam1",
     start_node_id="B",
     end_node_id="C", 
     section=w_section,
     material=steel,
-    orientation=np.array([0.0, 0.0, 1.0])  # y-axis → global Z
+    orientation=np.array([0.0, 0.0, 1.0]),  # y-axis → global Z
+    element_type="beam"
 )
 
-# Inclined member - y-axis perpendicular to member, pointing "up"
+# Inclined member (brace) - y-axis perpendicular to member, pointing "up"
 brace = Member(
     id="brace1",
     start_node_id="A",
     end_node_id="C",
     section=angle_section,
     material=steel,
-    orientation=np.array([0.0, 0.0, 1.0])  # Projected onto perpendicular plane
+    orientation=np.array([0.0, 0.0, 1.0]),  # Projected onto perpendicular plane
+    element_type="truss"  # Two-force member (brace)
+)
+
+# Cable with releases at both ends (only transmits tension)
+cable = Member(
+    id="guy_wire",
+    start_node_id="D",
+    end_node_id="E",
+    section=cable_section,
+    material=steel,
+    orientation=np.array([0.0, 0.0, 1.0]),
+    element_type="cable",
+    releases="111111111111"  # All forces/moments released (tension only)
 )
 ```
 
@@ -345,514 +424,45 @@ class FrameLoadCase:
     nodal_forces: List[NodalForce] = field(default_factory=list)
     nodal_moments: List[NodalMoment] = field(default_factory=list)
     member_point_forces: List[MemberPointForce] = field(default_factory=list)
+    member_point_moments: List[MemberPointMoment] = field(default_factory=list)
     member_distributed_forces: List[MemberDistributedForce] = field(default_factory=list)
+    nodal_springs: List[NodalSpring] = field(default_factory=list)
 ```
 
-### Load Types
+See the [Loads reference documentation](../setup/loads.md#frameloadcase) for complete `FrameLoadCase` documentation including all load types and methods.
 
-#### NodalForce
-
-Force applied directly at a node (in global coordinates).
-
-```python
-@dataclass
-class NodalForce:
-    node_id: str              # Target node ID
-    force: np.ndarray         # [FX, FY, FZ] in global coordinates
-```
-
-#### NodalMoment
-
-Moment applied directly at a node (in global coordinates).
-
-```python
-@dataclass  
-class NodalMoment:
-    node_id: str              # Target node ID
-    moment: np.ndarray        # [MX, MY, MZ] in global coordinates
-```
-
-#### MemberPointForce
-
-Point force applied along a member (in local or global coordinates).
-
-```python
-@dataclass
-class MemberPointForce:
-    member_id: str            # Target member ID
-    position: float           # Distance from start node (0 to L) OR fraction (0 to 1)
-    force: np.ndarray         # [Fx, Fy, Fz] force vector
-    coords: str = "local"     # "local" or "global" coordinate system
-    position_type: str = "absolute"  # "absolute" (distance) or "relative" (fraction)
-```
-
-#### MemberDistributedForce
-
-Distributed force along a member segment.
-
-```python
-@dataclass
-class MemberDistributedForce:
-    member_id: str
-    start_position: float     # Distance from start node
-    end_position: float       # Distance from start node  
-    start_force: np.ndarray   # [wx, wy, wz] per unit length at start
-    end_force: np.ndarray     # [wx, wy, wz] per unit length at end
-    coords: str = "local"     # "local" or "global"
-```
-
-### Methods
-
-```python
-def add_nodal_force(self, node_id: str, force: np.ndarray) -> None:
-    """Add a force at a node."""
-
-def add_nodal_moment(self, node_id: str, moment: np.ndarray) -> None:
-    """Add a moment at a node."""
-
-def add_member_point_force(
-    self,
-    member_id: str,
-    position: float,
-    force: np.ndarray,
-    coords: str = "local"
-) -> None:
-    """Add a point force along a member."""
-
-def add_member_distributed_force(
-    self,
-    member_id: str,
-    start_position: float,
-    end_position: float,
-    start_force: np.ndarray,
-    end_force: np.ndarray,
-    coords: str = "local"
-) -> None:
-    """Add a distributed force along a member segment."""
-
-def add_member_uniform_force(
-    self,
-    member_id: str,
-    force: np.ndarray,
-    coords: str = "local"
-) -> None:
-    """Add a uniform distributed force over the entire member length."""
-```
-
-### Example
+### Quick Reference: Adding Loads
 
 ```python
 from beamy.frame import FrameLoadCase
 import numpy as np
 
-loads = FrameLoadCase(name="Wind + Dead Load")
+loads = FrameLoadCase(name="Combined Loads")
 
-# Point load at node D (global coordinates)
-loads.add_nodal_force("D", force=np.array([50000.0, 0.0, 0.0]))  # 50kN horizontal
+# Nodal forces (at specific nodes)
+loads.add_nodal_force("D", force=np.array([50000.0, 0.0, 0.0]))
 
-# Uniform dead load on beam (local z = down relative to beam)
-loads.add_member_uniform_force("beam1", force=np.array([0.0, 0.0, -5000.0]))  # 5kN/m
-```
+# Nodal moments
+loads.add_nodal_moment("C", moment=np.array([0.0, 0.0, 25000.0]))
 
----
+# Point forces along members
+loads.add_member_point_force("beam1", position=3.0, force=np.array([0.0, 0.0, -50000.0]))
 
-## LoadedFrame
-
-A frame with loads applied, ready for analysis.
-
-```python
-from beamy.frame import LoadedFrame
-
-@dataclass
-class LoadedFrame:
-    frame: Frame
-    loads: FrameLoadCase
-```
-
-### Initialization
-
-On instantiation, `LoadedFrame`:
-1. Validates load references (node IDs and member IDs exist)
-2. Transforms member loads from local to global coordinates
-3. Performs global frame analysis (stiffness method)
-4. Computes nodal displacements and reactions
-5. Extracts member end forces
-
-### Properties
-
-```python
-@property
-def nodal_displacements(self) -> Dict[str, np.ndarray]:
-    """
-    Dictionary mapping node ID to displacement vector [UX, UY, UZ, RX, RY, RZ].
-    Displacements are in global coordinates.
-    """
-
-@property
-def reactions(self) -> Dict[str, np.ndarray]:
-    """
-    Dictionary mapping supported node ID to reaction vector [FX, FY, FZ, MX, MY, MZ].
-    Reactions are in global coordinates.
-    """
-
-@property
-def member_end_forces(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
-    """
-    Dictionary mapping member ID to (start_forces, end_forces).
-    Forces are in local member coordinates [Nx, Vy, Vz, Tx, My, Mz].
-    """
-```
-
-### Analysis Methods
-
-```python
-def get_member_results(self, member_id: str) -> MemberResults:
-    """
-    Get detailed analysis results for a specific member.
-    
-    Returns a MemberResults object containing:
-    - Axial force distribution
-    - Shear force distributions (y and z)
-    - Bending moment distributions (y and z)
-    - Torsion distribution
-    - Displacement distributions
-    - Stress distributions
-    """
-
-def to_loaded_beams(self) -> Dict[str, LoadedBeam]:
-    """
-    Convert frame analysis to individual LoadedBeam objects.
-    
-    Each member is converted to a LoadedBeam with:
-    - Member end forces as support reactions
-    - Any intermediate member loads applied
-    - Local coordinate system orientation
-    
-    Returns dictionary mapping member ID to LoadedBeam.
-    """
-```
-
-### MemberResults
-
-Detailed results for an individual member.
-
-```python
-@dataclass
-class MemberResults:
-    member: Member
-    
-    # Analysis results (all are Result objects like LoadedBeam)
-    axial: AnalysisResult          # N(x), sigma_axial(x), u(x)
-    shear_y: AnalysisResult        # Vy(x), tau_y(x), v(x) 
-    shear_z: AnalysisResult        # Vz(x), tau_z(x), w(x)
-    bending_y: AnalysisResult      # My(x), sigma_y(x), theta_y(x)
-    bending_z: AnalysisResult      # Mz(x), sigma_z(x), theta_z(x)
-    torsion: AnalysisResult        # T(x), tau_torsion(x), phi(x)
-    
-    @property
-    def von_mises(self) -> Result:
-        """Combined Von Mises stress distribution."""
-```
-
-### Visualization
-
-All 3D plots use matplotlib's wireframe style for clarity. Members are rendered as lines connecting nodes, with optional color mapping for results visualization.
-
-#### Basic Frame Plot
-
-```python
-def plot(
-    self,
-    show_loads: bool = True,
-    show_reactions: bool = True,
-    show_member_ids: bool = True,
-    show_node_ids: bool = True,
-    deformed: bool = False,
-    scale_factor: float = 1.0,
-    save_path: Optional[str] = None
-) -> None:
-    """
-    Plot the frame geometry in 3D wireframe style.
-    
-    Args:
-        show_loads: Display applied load arrows
-        show_reactions: Display reaction arrows at supports
-        show_member_ids: Label members with their IDs
-        show_node_ids: Label nodes with their IDs
-        deformed: If True, show deformed shape overlay
-        scale_factor: Scale factor for deformed shape visualization
-        save_path: Path to save the plot (supports .svg)
-    
-    Rendering:
-        - Undeformed shape: solid black lines
-        - Deformed shape: dashed blue lines (when deformed=True)
-        - Supports: triangle markers at constrained nodes
-        - Loads: arrow quivers in red
-        - Reactions: arrow quivers in green
-    """
-```
-
-#### Deflection Plot
-
-```python
-def plot_deflection(
-    self,
-    scale_factor: float = 1.0,
-    points_per_member: int = 20,
-    colormap: str = "viridis",
-    show_undeformed: bool = True,
-    show_colorbar: bool = True,
-    save_path: Optional[str] = None
-) -> None:
-    """
-    Plot the deformed frame shape in 3D wireframe style, colored by displacement magnitude.
-    
-    Args:
-        scale_factor: Multiplier for displacement visualization (1.0 = true scale)
-        points_per_member: Number of interpolation points along each member
-        colormap: Matplotlib colormap name for displacement magnitude
-        show_undeformed: If True, show original geometry as faint dashed lines
-        show_colorbar: If True, display colorbar with displacement units
-        save_path: Path to save the plot (supports .svg)
-    
-    Rendering:
-        - Each member is discretized into segments
-        - Segment colors represent total displacement magnitude at that point
-        - Displacement magnitude = sqrt(Ux² + Uy² + Uz²)
-        - Undeformed shape shown as light gray dashed wireframe
-        - Colorbar shows displacement range (min to max)
-    
-    Example:
-        >>> loaded_frame.plot_deflection(
-        ...     scale_factor=100,      # Exaggerate deflections 100x
-        ...     colormap="plasma",
-        ...     save_path="deflection.svg"
-        ... )
-    """
-```
-
-#### Von Mises Stress Plot
-
-```python
-def plot_von_mises(
-    self,
-    points_per_member: int = 20,
-    colormap: str = "jet",
-    show_colorbar: bool = True,
-    stress_limits: Optional[Tuple[float, float]] = None,
-    save_path: Optional[str] = None
-) -> None:
-    """
-    Plot the frame in 3D wireframe style, colored by Von Mises stress.
-    
-    Args:
-        points_per_member: Number of interpolation points along each member
-        colormap: Matplotlib colormap name for stress visualization
-        show_colorbar: If True, display colorbar with stress units
-        stress_limits: Optional (min, max) tuple to fix colorbar range.
-                       If None, auto-scales to data range.
-        save_path: Path to save the plot (supports .svg)
-    
-    Rendering:
-        - Each member is discretized into line segments
-        - Segment colors represent Von Mises stress at that point
-        - Von Mises stress computed as: σ_vm = sqrt(σ² + 3τ²)
-        - High stress regions shown in warm colors (red/yellow)
-        - Low stress regions shown in cool colors (blue/green)
-    
-    Stress Calculation:
-        At each point along each member, Von Mises stress is computed from:
-        - σ_axial: Axial stress from N/A
-        - σ_bending: Combined bending stress from My and Mz
-        - τ_shear: Combined shear stress from Vy and Vz
-        - τ_torsion: Torsional shear stress from T
-        
-        σ_max = |σ_axial| + |σ_bending_y| + |σ_bending_z|  (conservative superposition)
-        τ_max = |τ_shear_y| + |τ_shear_z| + |τ_torsion|
-        σ_vm = sqrt(σ_max² + 3·τ_max²)
-    
-    Example:
-        >>> loaded_frame.plot_von_mises(
-        ...     colormap="hot",
-        ...     stress_limits=(0, 250e6),  # 0 to 250 MPa
-        ...     save_path="stress.svg"
-        ... )
-    """
-```
-
-#### Combined Stress and Deflection Plot
-
-```python
-def plot_results(
-    self,
-    result_type: str = "von_mises",
-    deformed: bool = True,
-    scale_factor: float = 1.0,
-    points_per_member: int = 20,
-    colormap: str = "jet",
-    show_undeformed: bool = True,
-    show_colorbar: bool = True,
-    show_node_ids: bool = False,
-    show_member_ids: bool = False,
-    value_limits: Optional[Tuple[float, float]] = None,
-    save_path: Optional[str] = None
-) -> None:
-    """
-    Unified 3D wireframe plot showing deformed shape colored by analysis results.
-    
-    Args:
-        result_type: Type of result to display. Options:
-            - "von_mises": Von Mises stress
-            - "deflection": Displacement magnitude
-            - "axial_stress": Axial stress (σ from N)
-            - "bending_stress": Combined bending stress (σ from M)
-            - "shear_stress": Combined shear stress (τ from V)
-            - "axial_force": Axial force N
-            - "shear_force": Combined shear force magnitude
-            - "bending_moment": Combined bending moment magnitude
-            - "torsion": Torsional moment T
-        deformed: If True, plot on deformed geometry
-        scale_factor: Displacement scale factor (only used if deformed=True)
-        points_per_member: Number of interpolation points per member
-        colormap: Matplotlib colormap name
-        show_undeformed: Show original geometry as reference
-        show_colorbar: Display colorbar legend
-        show_node_ids: Label nodes
-        show_member_ids: Label members
-        value_limits: Optional (min, max) to fix color range
-        save_path: Path to save the plot (supports .svg)
-    
-    Example:
-        >>> # Von Mises stress on deformed shape
-        >>> loaded_frame.plot_results(
-        ...     result_type="von_mises",
-        ...     deformed=True,
-        ...     scale_factor=50,
-        ...     save_path="results.svg"
-        ... )
-        
-        >>> # Bending moment diagram in 3D
-        >>> loaded_frame.plot_results(
-        ...     result_type="bending_moment",
-        ...     deformed=False,
-        ...     colormap="RdBu_r",  # Diverging colormap for +/- values
-        ...     save_path="moment.svg"
-        ... )
-    """
-```
-
-#### Member Force Diagrams (2D)
-
-```python
-def plot_member_diagrams(
-    self,
-    member_id: str,
-    save_path: Optional[str] = None
-) -> None:
-    """
-    Plot internal force diagrams (N, V, M, T) for a specific member.
-    
-    Creates a 2x2 subplot figure showing:
-        - Top-left: Axial force N(x)
-        - Top-right: Shear forces Vy(x) and Vz(x)
-        - Bottom-left: Bending moments My(x) and Mz(x)
-        - Bottom-right: Torsion T(x)
-    
-    All diagrams use the member's local x-axis (0 to L).
-    """
-```
-
-#### Visualization Examples
-
-```python
-# Basic geometry plot
-loaded_frame.plot(show_loads=True, show_reactions=True)
-
-# Deformed shape with displacement coloring
-loaded_frame.plot_deflection(
-    scale_factor=100,
-    colormap="viridis",
-    save_path="deflection.svg"
+# Distributed forces over member segments
+loads.add_member_distributed_force(
+    member_id="beam1",
+    start_position=0.0,
+    end_position=10.0,
+    start_force=np.array([0.0, 0.0, -5000.0]),
+    end_force=np.array([0.0, 0.0, -5000.0])
 )
 
-# Von Mises stress distribution
-loaded_frame.plot_von_mises(
-    colormap="jet",
-    stress_limits=(0, 345e6),  # Cap at yield stress
-    save_path="von_mises.svg"
-)
+# Uniform distributed forces (entire member)
+loads.add_member_uniform_force("beam1", force=np.array([0.0, 0.0, -3000.0]))
 
-# Combined: stress on deformed shape
-loaded_frame.plot_results(
-    result_type="von_mises",
-    deformed=True,
-    scale_factor=50,
-    show_undeformed=True,
-    save_path="combined.svg"
-)
-
-# Axial force distribution (useful for trusses)
-loaded_frame.plot_results(
-    result_type="axial_force",
-    deformed=False,
-    colormap="RdBu_r",  # Red = tension, Blue = compression
-    save_path="axial.svg"
-)
-```
-
-#### Wireframe Rendering Details
-
-The 3D wireframe visualization uses matplotlib's `Axes3D` with `Line3DCollection`:
-
-- **Line Segments**: Each member is divided into `points_per_member` segments
-- **Color Mapping**: Segment colors interpolated from result values at endpoints
-- **Deformation**: Node positions offset by scaled displacement vectors
-- **Interpolation**: Results sampled along member using FEM shape functions
-
-```
-Wireframe Structure:
-    
-    Node B ──────────────── Node C
-       │   ╲               ╱   │
-       │    ╲   segments  ╱    │
-       │     ╲───────────╱     │
-       │      colored by       │
-       │      result value     │
-       │                       │
-    Node A                   Node D
-    (support)               (support)
-```
-
-The wireframe style provides:
-- Clear visibility of frame geometry
-- Easy interpretation of stress/deflection gradients
-- Lightweight rendering for large structures
-- Consistent appearance across all plot types
-
-### Example
-
-```python
-from beamy.frame import LoadedFrame
-
-# Analyze frame
-loaded_frame = LoadedFrame(frame, loads)
-
-# Get reactions at supports
-print("Reactions at node A:", loaded_frame.reactions["A"])
-print("Reactions at node B:", loaded_frame.reactions["B"])
-
-# Get detailed results for a member
-beam_results = loaded_frame.get_member_results("beam1")
-print(f"Max bending moment: {beam_results.bending_z.action.abs_max:.2f} N·m")
-print(f"Max deflection: {beam_results.shear_z.displacement.abs_max:.6f} m")
-
-# Plot frame
-loaded_frame.plot(deformed=True, scale_factor=100)
-
-# Access individual LoadedBeam objects for compatibility
-loaded_beams = loaded_frame.to_loaded_beams()
-beam1_lb = loaded_beams["beam1"]
-beam1_lb.check_aisc_chapter_f("m", "N")  # Run code checks
+# Elastic nodal springs (partial boundary conditions)
+K = np.diag([1e6, 1e6, 1e6, 1e5, 1e5, 1e5])
+loads.add_nodal_spring("A", K)
 ```
 
 ---

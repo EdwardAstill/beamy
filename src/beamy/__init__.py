@@ -4,7 +4,7 @@ from .core.results import Result, AnalysisResult
 from .core.loads import (
     PointForce, Moment, DistributedForce,
     NodalForce, NodalMoment, MemberPointForce, MemberDistributedForce,
-    LoadCase, FrameLoadCase
+    LoadCase, FrameLoadCase, NodalSpring
 )
 from .beam1d.beam import Beam1D
 from .beam1d.analysis import LoadedBeam
@@ -35,7 +35,7 @@ __all__ = [
     "Result", "AnalysisResult",
     "PointForce", "Moment", "DistributedForce",
     "NodalForce", "NodalMoment", "MemberPointForce", "MemberDistributedForce",
-    "LoadCase", "FrameLoadCase",
+    "LoadCase", "FrameLoadCase", "NodalSpring",
     "Beam1D", "LoadedBeam",
     "Node", "Member", "Frame", "LoadedFrame", "MemberResults",
     "FrameAnalysisSettings", "FrameAnalysisResult", "StabilizationReport",

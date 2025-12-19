@@ -19,9 +19,10 @@ from .solver import (
     recover_member_end_forces,
     ElementStiffnessScales,
     assemble_geometric_stiffness,
+    assemble_internal_nodal_forces,
 )
 from ..core.math import build_transformation_matrix_12x12
-from .results import MemberResultsDirect
+from .results import MemberResultsDirect, MemberDemandProvider
 
 
 AnalysisMethod = Literal[
@@ -139,7 +140,11 @@ class FrameAnalysisResult:
 
     nodal_displacements: Dict[str, np.ndarray]
     reactions: Dict[str, np.ndarray]
+    reactions_physical: Dict[str, np.ndarray]
+    reactions_stabilization: Dict[str, np.ndarray]
+    equilibrium_residual_norm: float
     member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]]
+    demand_provider: Optional["MemberDemandProvider"]
 
     # Metadata
     settings: FrameAnalysisSettings
@@ -240,6 +245,7 @@ class LoadedFrame:
     _nodal_displacements: Dict[str, np.ndarray] = field(init=False, default_factory=dict)
     _reactions: Dict[str, np.ndarray] = field(init=False, default_factory=dict)
     _member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]] = field(init=False, default_factory=dict)
+    _member_fixed_end_forces_local: Dict[str, np.ndarray] = field(init=False, default_factory=dict)
 
     analysis_result: Optional[FrameAnalysisResult] = field(init=False, default=None)
 
@@ -251,8 +257,6 @@ class LoadedFrame:
     _member_segment_offset: Dict[str, float] = field(init=False, default_factory=dict)  # segment -> x0 along parent
     _member_nodes_along: Dict[str, List[Tuple[float, str]]] = field(init=False, default_factory=dict)  # parent -> [(x,node_id)]
 
-    # Diagnostics for batch extraction
-    _to_loaded_beams_failures: Dict[str, str] = field(init=False, default_factory=dict)
     
     def __post_init__(self) -> None:
         # Preserve user-level model for member bundling and conversion.
@@ -325,6 +329,19 @@ class LoadedFrame:
         for mdf in self.loads.member_distributed_forces:
             if mdf.member_id not in mids:
                 raise ValueError(f"Unknown member '{mdf.member_id}'")
+
+        for ns in getattr(self.loads, "nodal_springs", []):
+            if ns.node_id not in self.frame.nodes:
+                raise ValueError(f"Unknown node '{ns.node_id}'")
+            if getattr(ns, "coords", "global") == "local":
+                if not ns.reference_member_id:
+                    raise ValueError(f"NodalSpring at '{ns.node_id}' uses local coords but has no reference_member_id")
+                try:
+                    _ = self._get_reference_member(ns.reference_member_id)
+                except KeyError:
+                    raise ValueError(
+                        f"Unknown reference member '{ns.reference_member_id}' for nodal spring at '{ns.node_id}'"
+                    )
 
     def _expand_model_for_attachment_points(self, frame: Frame, loads: FrameLoadCase) -> tuple[Frame, FrameLoadCase]:
         """Insert real nodes at member-point attachment locations and split members.
@@ -529,6 +546,7 @@ class LoadedFrame:
         expanded_loads = FrameLoadCase(name=loads.name)
         expanded_loads.nodal_forces = list(loads.nodal_forces)
         expanded_loads.nodal_moments = list(loads.nodal_moments)
+        expanded_loads.nodal_springs = list(getattr(loads, "nodal_springs", []))
 
         # Point loads/moments become nodal loads at the inserted node
         for mpf in loads.member_point_forces:
@@ -594,6 +612,20 @@ class LoadedFrame:
         node_ids = sorted(self.frame.nodes.keys())
         node_to_idx = {nid: i for i, nid in enumerate(node_ids)}
 
+        # Nodal springs (convert to global 6x6 stiffness blocks).
+        nodal_spring_stiffnesses: List[Tuple[str, np.ndarray]] = []
+        for ns in getattr(self.loads, "nodal_springs", []):
+            if getattr(ns, "coords", "global") == "local":
+                ref = self._get_reference_member(ns.reference_member_id)
+                R = ref.transformation_matrix
+                T6 = np.zeros((6, 6))
+                T6[0:3, 0:3] = R
+                T6[3:6, 3:6] = R
+                K6 = T6.T @ ns.K @ T6
+            else:
+                K6 = ns.K
+            nodal_spring_stiffnesses.append((ns.node_id, np.asarray(K6, dtype=float)))
+
         F_global = self._build_load_vector(node_to_idx, 6 * len(node_ids))
 
         if self.settings.imperfection_model == "notional_loads":
@@ -627,7 +659,6 @@ class LoadedFrame:
         omega = float(self.settings.relaxation_omega)
 
         d_global: Optional[np.ndarray] = None
-        K_global: Optional[np.ndarray] = None
 
         warnings: List[str] = []
         design_grade_notes: List[str] = []
@@ -651,6 +682,7 @@ class LoadedFrame:
             design_grade_notes.append(
                 f"Second-order analysis enabled (method={self.settings.analysis_method}, n_steps={n_steps}, omega={omega})"
             )
+            design_grade_notes.append("Geometric stiffness excludes torsional contribution; torsional stability not captured.")
 
         def _assemble_global_stiffness() -> tuple[np.ndarray, dict]:
             if cable_member_ids:
@@ -659,11 +691,13 @@ class LoadedFrame:
                     node_to_idx,
                     member_axial_scales=member_axial_scales,
                     member_stiffness_scales=member_stiffness_scales,
+                    nodal_spring_stiffnesses=nodal_spring_stiffnesses,
                 )
             return assemble_global_stiffness(
                 self.frame,
                 node_to_idx,
                 member_stiffness_scales=member_stiffness_scales,
+                nodal_spring_stiffnesses=nodal_spring_stiffnesses,
             )
 
         def _solve_tangent(K: np.ndarray, Kg: np.ndarray, F: np.ndarray, fixed_dofs: List[int]) -> np.ndarray:
@@ -706,6 +740,7 @@ class LoadedFrame:
                     node_to_idx,
                     d_new,
                     mats,
+                    member_fixed_end_forces=self._member_fixed_end_forces_local,
                 )
 
                 if last_d is not None:
@@ -752,6 +787,7 @@ class LoadedFrame:
                         node_to_idx,
                         d_step,
                         mats,
+                        member_fixed_end_forces=self._member_fixed_end_forces_local,
                     )
                     iterations += 1
 
@@ -793,26 +829,51 @@ class LoadedFrame:
         if d_global is None:
             raise RuntimeError("Frame analysis did not run")
 
-        # Recompute reactions from the final linear stiffness (material stiffness only).
-        # For second-order, this is an approximation; reaction reporting is primarily for equilibrium checks.
-        if K_global is None:
-            K_global, _ = _assemble_global_stiffness()
+        # Equilibrium-based reactions (design-grade): internal member forces and applied loads only.
+        internal_nodal_forces = assemble_internal_nodal_forces(
+            self.frame,
+            node_to_idx,
+            self._member_end_forces,
+            mats,
+            d_global=d_global,
+            nodal_spring_stiffnesses=nodal_spring_stiffnesses,
+        )
+        residual = internal_nodal_forces - F_global
+        equilibrium_residual_norm = float(np.linalg.norm(residual))
 
-        R_global = K_global @ d_global - F_global
-        for nid in constrained_nodes:
-            self._reactions[nid] = R_global[node_to_idx[nid]*6 : node_to_idx[nid]*6 + 6]
+        reactions_physical: Dict[str, np.ndarray] = {nid: np.zeros(6) for nid in self.frame.nodes}
+        reactions_stab: Dict[str, np.ndarray] = {nid: np.zeros(6) for nid in self.frame.nodes}
+
+        for dof in fixed_dofs_physical:
+            nid = node_ids[dof // 6]
+            idx = dof % 6
+            reactions_physical[nid][idx] = -residual[dof]
+
+        for dof in stabilization.added_dofs:
+            nid = node_ids[dof // 6]
+            idx = dof % 6
+            reactions_stab[nid][idx] = -residual[dof]
+
+        # Save convenience alias for legacy callers (physical only).
+        self._reactions = {nid: vec for nid, vec in reactions_physical.items() if np.any(np.abs(vec) > 0)}
 
         if stabilization.used:
             design_grade_notes.append(
-                "Numerical stabilization constraints were added (truss/cable-only node rotations)"
+                "Numerical stabilization constraints were added (truss/cable-only node rotations); reactions on these DOFs are reported separately."
             )
 
         design_grade_ok = bool(converged) and (not stabilization.used)
 
+        demand_provider = MemberDemandProvider(self.frame, self.loads, self._member_end_forces, self._member_bundle)
+
         self.analysis_result = FrameAnalysisResult(
             nodal_displacements=dict(self._nodal_displacements),
             reactions=dict(self._reactions),
+            reactions_physical={nid: vec for nid, vec in reactions_physical.items() if np.any(np.abs(vec) > 0)},
+            reactions_stabilization={nid: vec for nid, vec in reactions_stab.items() if np.any(np.abs(vec) > 0)},
+            equilibrium_residual_norm=equilibrium_residual_norm,
             member_end_forces=dict(self._member_end_forces),
+            demand_provider=demand_provider,
             settings=self.settings,
             converged=bool(converged),
             iterations=int(iterations),
@@ -917,6 +978,8 @@ class LoadedFrame:
 
     def _build_load_vector(self, node_to_idx: Dict[str, int], n_dofs: int) -> np.ndarray:
         F = np.zeros(n_dofs)
+        # Track fixed-end forces per member in local axes (start DOFs first).
+        self._member_fixed_end_forces_local = {m.id: np.zeros(12) for m in self.frame.members}
         for nf in self.loads.nodal_forces:
             f_g = nf.force
             if getattr(nf, "coords", "global") == "local":
@@ -931,11 +994,11 @@ class LoadedFrame:
                 m_g = m_ref.transformation_matrix.T @ nm.moment
             F[node_to_idx[nm.node_id]*6+3 : node_to_idx[nm.node_id]*6+6] += m_g
         for mpf in self.loads.member_point_forces:
-            self._add_member_point_force_to_vector(mpf, node_to_idx, F)
+            self._add_member_point_force_to_vector(mpf, node_to_idx, F, self._member_fixed_end_forces_local)
         for mpm in getattr(self.loads, "member_point_moments", []):
-            self._add_member_point_moment_to_vector(mpm, node_to_idx, F)
+            self._add_member_point_moment_to_vector(mpm, node_to_idx, F, self._member_fixed_end_forces_local)
         for mdf in self.loads.member_distributed_forces:
-            self._add_member_distributed_force_to_vector(mdf, node_to_idx, F)
+            self._add_member_distributed_force_to_vector(mdf, node_to_idx, F, self._member_fixed_end_forces_local)
         return F
 
     @staticmethod
@@ -999,23 +1062,33 @@ class LoadedFrame:
 
         return f_eq
 
-    def _add_member_point_force_to_vector(self, mpf, node_to_idx, F):
+    def _add_member_point_force_to_vector(self, mpf, node_to_idx, F, member_fixed_end_forces_local):
         m = self.frame.get_member(mpf.member_id)
         x = mpf.position * m.length if mpf.position_type == "relative" else mpf.position
         f_g = m.transformation_matrix.T @ mpf.force if mpf.coords == "local" else mpf.force
+        f_l = mpf.force if mpf.coords == "local" else m.transformation_matrix @ mpf.force
         N1, N2 = 1 - x/m.length, x/m.length
         F[node_to_idx[m.start_node_id]*6 : node_to_idx[m.start_node_id]*6+3] += N1 * f_g
         F[node_to_idx[m.end_node_id]*6 : node_to_idx[m.end_node_id]*6+3] += N2 * f_g
+        f_eq_local = np.zeros(12)
+        f_eq_local[0:3] += N1 * f_l
+        f_eq_local[6:9] += N2 * f_l
+        member_fixed_end_forces_local[m.id] += f_eq_local
 
-    def _add_member_point_moment_to_vector(self, mpm, node_to_idx, F):
+    def _add_member_point_moment_to_vector(self, mpm, node_to_idx, F, member_fixed_end_forces_local):
         m = self.frame.get_member(mpm.member_id)
         x = mpm.position * m.length if mpm.position_type == "relative" else mpm.position
         m_g = m.transformation_matrix.T @ mpm.moment if mpm.coords == "local" else mpm.moment
+        m_l = mpm.moment if mpm.coords == "local" else m.transformation_matrix @ mpm.moment
         N1, N2 = 1 - x/m.length, x/m.length
         F[node_to_idx[m.start_node_id]*6+3 : node_to_idx[m.start_node_id]*6+6] += N1 * m_g
         F[node_to_idx[m.end_node_id]*6+3 : node_to_idx[m.end_node_id]*6+6] += N2 * m_g
+        f_eq_local = np.zeros(12)
+        f_eq_local[3:6] += N1 * m_l
+        f_eq_local[9:12] += N2 * m_l
+        member_fixed_end_forces_local[m.id] += f_eq_local
 
-    def _add_member_distributed_force_to_vector(self, mdf, node_to_idx, F):
+    def _add_member_distributed_force_to_vector(self, mdf, node_to_idx, F, member_fixed_end_forces_local):
         m = self.frame.get_member(mdf.member_id)
         if mdf.coords == "global":
             s_f_l = m.transformation_matrix @ mdf.start_force
@@ -1033,6 +1106,7 @@ class LoadedFrame:
         )
         T12 = build_transformation_matrix_12x12(m.transformation_matrix)
         f_eq_global = T12.T @ f_eq_local
+        member_fixed_end_forces_local[m.id] += f_eq_local
 
         s_idx = node_to_idx[m.start_node_id] * 6
         e_idx = node_to_idx[m.end_node_id] * 6
@@ -1045,240 +1119,13 @@ class LoadedFrame:
     def reactions(self) -> Dict[str, np.ndarray]: return self._reactions
     @property
     def member_end_forces(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]: return self._member_end_forces
-
-    def to_loaded_beams(self) -> Dict[str, 'LoadedBeam']:
-        from ..beam1d.beam import Beam1D
-        from ..core.support import Support
-        from ..beam1d.analysis import LoadedBeam
-
-        def _has_any_support(s: Optional[str]) -> bool:
-            return bool(s) and any(c == "1" for c in s)
-
-        def _merge_support_types(a: Optional[str], b: Optional[str]) -> Optional[str]:
-            if not a:
-                return b
-            if not b:
-                return a
-            return "".join("1" if (ca == "1" or cb == "1") else "0" for ca, cb in zip(a, b))
-
-        def _stabilize_supports(supports: list[Support]) -> list[Support]:
-            """Ensure the 1D beam FEM has enough boundary conditions.
-
-            The transverse (Hermite) beam solve uses translation+rotation DOFs.
-            If *no* Ry/Rz constraints exist anywhere, the stiffness matrix becomes singular.
-
-            Frame models can legitimately omit some rotations/translations (e.g. lifted case),
-            so we add a minimal stabilizer at x=0 (or merge into existing x=0 support)
-            for any missing DOFs.
-            """
-            have = [any(s.type[i] == "1" for s in supports) for i in range(6)]
-
-            if all(have):
-                return supports
-
-            stabilizer = list("000000")
-            for i in range(6):
-                if not have[i]:
-                    stabilizer[i] = "1"
-            stab_type = "".join(stabilizer)
-
-            # Merge into an existing x=0 support if present.
-            for s in supports:
-                if abs(float(s.x) - 0.0) <= 1e-9:
-                    s.type = _merge_support_types(s.type, stab_type) or s.type
-                    return supports
-
-            return [Support(x=0.0, type=stab_type)] + supports
-
-        def _supports_from_chain(chain: list[tuple[float, str]]) -> tuple[list[Support], set[str]]:
-            """Build 1D supports from frame node constraints along a member chain."""
-            # Map x -> merged support type
-            x_to_type: dict[float, str] = {}
-            supported_node_ids: set[str] = set()
-
-            for x, nid in chain:
-                node = self.frame.get_node(nid)
-                if not _has_any_support(node.support):
-                    continue
-                supported_node_ids.add(nid)
-                x_f = float(x)
-                # Dedup by tolerance
-                merged_key = None
-                for existing_x in x_to_type.keys():
-                    if abs(existing_x - x_f) <= 1e-9:
-                        merged_key = existing_x
-                        break
-                if merged_key is None:
-                    x_to_type[x_f] = node.support  # type: ignore[assignment]
-                else:
-                    x_to_type[merged_key] = _merge_support_types(x_to_type[merged_key], node.support) or x_to_type[merged_key]
-
-            supports = [Support(x=x, type=t) for x, t in sorted(x_to_type.items(), key=lambda kv: kv[0])]
-            supports = _stabilize_supports(supports)
-            return supports, supported_node_ids
-
-        def _as_global(vec: np.ndarray, coords: str, reference_member_id: Optional[str]) -> np.ndarray:
-            if coords != "local":
-                return vec
-            m_ref = self._get_reference_member(reference_member_id)
-            return m_ref.transformation_matrix.T @ vec
-
-        # Reset diagnostics
-        self._to_loaded_beams_failures = {}
-
-        # If we didn't split, keep the legacy behavior.
-        has_bundles = bool(self._member_bundle) and any(len(v) > 1 for v in self._member_bundle.values())
-        if not has_bundles:
-            loaded_beams: Dict[str, LoadedBeam] = {}
-            for member in self.frame.members:
-                try:
-                    start_f, end_f = self._member_end_forces[member.id]
-
-                    # Supports from frame node constraints (start/end only in non-bundled path)
-                    chain = [(0.0, member.start_node_id), (member.length, member.end_node_id)]
-                    supports, supported_node_ids = _supports_from_chain(chain)
-                    beam = Beam1D(L=member.length, material=member.material, section=member.section, supports=supports)
-                    lc = LoadCase(name=f"Member {member.id} loads")
-
-                    start_supported = member.start_node_id in supported_node_ids
-                    end_supported = member.end_node_id in supported_node_ids
-
-                    if member.element_type != "beam":
-                        if not end_supported:
-                            lc.add_point_force(PointForce(point=np.array([member.length, 0, 0]), force=np.array([-end_f[0], 0, 0])))
-                    else:
-                        if not end_supported:
-                            lc.add_point_force(PointForce(point=np.array([member.length, 0, 0]), force=-end_f[0:3]))
-                            if any(abs(end_f[3:6]) > 1e-10):
-                                lc.add_moment(Moment(x=member.length, moment=-end_f[3:6]))
-                        if not start_supported:
-                            if any(abs(start_f[3:6]) > 1e-10):
-                                lc.add_moment(Moment(x=0.0, moment=start_f[3:6]))
-
-                    for mpf in self.loads.member_point_forces:
-                        if mpf.member_id == member.id:
-                            x = mpf.position * member.length if mpf.position_type == "relative" else mpf.position
-                            f_l = member.transformation_matrix @ mpf.force if mpf.coords == "global" else mpf.force
-                            lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
-
-                    for mpm in getattr(self.loads, "member_point_moments", []):
-                        if mpm.member_id == member.id:
-                            x = mpm.position * member.length if mpm.position_type == "relative" else mpm.position
-                            m_l = member.transformation_matrix @ mpm.moment if mpm.coords == "global" else mpm.moment
-                            lc.add_moment(Moment(x=x, moment=m_l))
-
-                    for mdf in self.loads.member_distributed_forces:
-                        if mdf.member_id == member.id:
-                            s_f_l = member.transformation_matrix @ mdf.start_force if mdf.coords == "global" else mdf.start_force
-                            e_f_l = member.transformation_matrix @ mdf.end_force if mdf.coords == "global" else mdf.end_force
-                            lc.add_distributed_force(
-                                DistributedForce(
-                                    np.array([mdf.start_position, 0, 0]),
-                                    np.array([mdf.end_position, 0, 0]),
-                                    s_f_l,
-                                    e_f_l,
-                                )
-                            )
-
-                    loaded_beams[member.id] = LoadedBeam(beam, lc)
-                except Exception as e:
-                    self._to_loaded_beams_failures[member.id] = str(e)
-            return loaded_beams
-
-        # Bundled path: one LoadedBeam per original member.
-        loaded_beams: Dict[str, LoadedBeam] = {}
-        for parent in self.original_frame.members:
-            if parent.id not in self._member_bundle:
-                continue
-            seg_ids = self._member_bundle[parent.id]
-            if not seg_ids:
-                continue
-
-            first_seg_id = seg_ids[0]
-            last_seg_id = seg_ids[-1]
-            start_f, _ = self._member_end_forces[first_seg_id]
-            _, end_f = self._member_end_forces[last_seg_id]
-
-            try:
-                chain = self._member_nodes_along.get(parent.id, [])
-                supports, supported_node_ids = _supports_from_chain(chain)
-                beam = Beam1D(L=parent.length, material=parent.material, section=parent.section, supports=supports)
-                lc = LoadCase(name=f"Member {parent.id} loads")
-                # Determine whether member ends are supported (by node constraints)
-                start_nid = chain[0][1] if chain else parent.start_node_id
-                end_nid = chain[-1][1] if chain else parent.end_node_id
-                start_supported = start_nid in supported_node_ids
-                end_supported = end_nid in supported_node_ids
-
-                if parent.element_type != "beam":
-                    if not end_supported:
-                        lc.add_point_force(
-                            PointForce(
-                                point=np.array([parent.length, 0, 0]),
-                                force=np.array([-end_f[0], 0, 0]),
-                            )
-                        )
-                else:
-                    if not end_supported:
-                        lc.add_point_force(PointForce(point=np.array([parent.length, 0, 0]), force=-end_f[0:3]))
-                        if any(abs(end_f[3:6]) > 1e-10):
-                            lc.add_moment(Moment(x=parent.length, moment=-end_f[3:6]))
-                    if not start_supported:
-                        if any(abs(start_f[3:6]) > 1e-10):
-                            lc.add_moment(Moment(x=0.0, moment=start_f[3:6]))
-
-                node_to_x = {nid: float(x) for x, nid in chain}
-
-                # Nodal loads on those nodes become beam point loads (in parent local coords)
-                for nf in self.loads.nodal_forces:
-                    if nf.node_id not in node_to_x:
-                        continue
-                    x = node_to_x[nf.node_id]
-                    f_g = _as_global(nf.force, getattr(nf, "coords", "global"), getattr(nf, "reference_member_id", None))
-                    f_l = parent.transformation_matrix @ f_g
-                    lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
-
-                for nm in self.loads.nodal_moments:
-                    if nm.node_id not in node_to_x:
-                        continue
-                    x = node_to_x[nm.node_id]
-                    m_g = _as_global(nm.moment, getattr(nm, "coords", "global"), getattr(nm, "reference_member_id", None))
-                    m_l = parent.transformation_matrix @ m_g
-                    lc.add_moment(Moment(x=x, moment=m_l))
-
-                # Distributed loads on segments become beam distributed loads (offset to parent x)
-                for mdf in self.loads.member_distributed_forces:
-                    seg_id = mdf.member_id
-                    if seg_id not in self._member_segment_parent:
-                        continue
-                    if self._member_segment_parent[seg_id] != parent.id:
-                        continue
-                    x0 = float(self._member_segment_offset[seg_id])
-                    s_x = x0 + float(mdf.start_position)
-                    e_x = x0 + float(mdf.end_position)
-                    s_f_l = parent.transformation_matrix @ mdf.start_force if mdf.coords == "global" else mdf.start_force
-                    e_f_l = parent.transformation_matrix @ mdf.end_force if mdf.coords == "global" else mdf.end_force
-                    lc.add_distributed_force(
-                        DistributedForce(
-                            np.array([s_x, 0, 0]),
-                            np.array([e_x, 0, 0]),
-                            s_f_l,
-                            e_f_l,
-                        )
-                    )
-
-                loaded_beams[parent.id] = LoadedBeam(beam, lc)
-            except Exception as e:
-                self._to_loaded_beams_failures[parent.id] = str(e)
-
-        return loaded_beams
-
     @property
-    def to_loaded_beams_failures(self) -> Dict[str, str]:
-        """Per-member errors from the most recent call to to_loaded_beams()."""
-        return dict(self._to_loaded_beams_failures)
+    def demand_provider(self) -> "MemberDemandProvider":
+        if self.analysis_result and self.analysis_result.demand_provider:
+            return self.analysis_result.demand_provider
+        raise RuntimeError("Demand provider is available after analysis is complete.")
 
-    def get_member_results(self, member_id: str) -> MemberResultsDirect:
+    def get_member_results(self, member_id: str) -> MemberResultsDirect:def get_member_results(self, member_id: str) -> MemberResultsDirect:
         """
         Get internal force results for a member using direct equilibrium computation.
         
@@ -1294,11 +1141,13 @@ class LoadedFrame:
             if mdf.member_id == member_id:
                 # Convert to local coords if needed
                 if mdf.coords == "global":
-                    w_local = member.transformation_matrix @ mdf.start_force
+                    w_start_local = member.transformation_matrix @ mdf.start_force
+                    w_end_local = member.transformation_matrix @ mdf.end_force
                 else:
-                    w_local = mdf.start_force
-                # For uniform loads, start_force == end_force
-                member_loads.append((mdf.start_position, mdf.end_position, w_local))
+                    w_start_local = mdf.start_force
+                    w_end_local = mdf.end_force
+                # Supports linearly varying loads
+                member_loads.append((mdf.start_position, mdf.end_position, w_start_local, w_end_local))
         
         return MemberResultsDirect(
             member=member,
@@ -1307,197 +1156,7 @@ class LoadedFrame:
             member_loads=member_loads,
         )
 
-    def to_loaded_beam(self, member_id: str) -> 'LoadedBeam':
-        """
-        Extract a single member (combining segments if split) as a LoadedBeam for detailed analysis.
-        
-        If the member was split during analysis, all segments are recombined into a single
-        beam with their loads adjusted back to the original member's coordinate system.
-        
-        For nodes with fixed supports, those supports are preserved.
-        For nodes without fixed supports, the reactions from the frame analysis
-        are applied as boundary loads (opposite direction to balance the member).
-        
-        Args:
-            member_id: The original (user-level) member ID to extract
-            
-        Returns:
-            A LoadedBeam object with the member isolated and properly loaded
-        """
-        from ..beam1d.beam import Beam1D
-        from ..core.support import Support
-        from ..core.loads import LoadCase, PointForce, Moment, DistributedForce
-        from ..beam1d.analysis import LoadedBeam
-
-        def _has_any_support(s: Optional[str]) -> bool:
-            return bool(s) and any(c == "1" for c in s)
-
-        def _merge_support_types(a: Optional[str], b: Optional[str]) -> Optional[str]:
-            if not a:
-                return b
-            if not b:
-                return a
-            return "".join("1" if (ca == "1" or cb == "1") else "0" for ca, cb in zip(a, b))
-
-        def _stabilize_supports(supports: list[Support]) -> list[Support]:
-            have = [any(s.type[i] == "1" for s in supports) for i in range(6)]
-            if all(have):
-                return supports
-            stabilizer = list("000000")
-            for i in range(6):
-                if not have[i]:
-                    stabilizer[i] = "1"
-            stab_type = "".join(stabilizer)
-            for s in supports:
-                if abs(float(s.x) - 0.0) <= 1e-9:
-                    s.type = _merge_support_types(s.type, stab_type) or s.type
-                    return supports
-            return [Support(x=0.0, type=stab_type)] + supports
-
-        def _supports_from_chain(chain: list[tuple[float, str]]) -> tuple[list[Support], set[str]]:
-            x_to_type: dict[float, str] = {}
-            supported_node_ids: set[str] = set()
-            for x, nid in chain:
-                node = self.frame.get_node(nid)
-                if not _has_any_support(node.support):
-                    continue
-                supported_node_ids.add(nid)
-                x_f = float(x)
-                merged_key = None
-                for existing_x in x_to_type.keys():
-                    if abs(existing_x - x_f) <= 1e-9:
-                        merged_key = existing_x
-                        break
-                if merged_key is None:
-                    x_to_type[x_f] = node.support  # type: ignore[assignment]
-                else:
-                    x_to_type[merged_key] = _merge_support_types(x_to_type[merged_key], node.support) or x_to_type[merged_key]
-            supports = [Support(x=x, type=t) for x, t in sorted(x_to_type.items(), key=lambda kv: kv[0])]
-            supports = _stabilize_supports(supports)
-            return supports, supported_node_ids
-        
-        # Resolve member: use original frame for user-level IDs
-        parent = self.original_frame.get_member(member_id)
-        
-        # Get the segment IDs if this member was split
-        seg_ids = self._member_bundle.get(member_id, [member_id])
-        if not seg_ids:
-            raise ValueError(f"No segments found for member {member_id}")
-        
-        first_seg_id = seg_ids[0]
-        last_seg_id = seg_ids[-1]
-        
-        # Get end forces from the expanded frame analysis
-        start_f, _ = self._member_end_forces[first_seg_id]
-        _, end_f = self._member_end_forces[last_seg_id]
-        
-        # Get the node chain for this member and derive supports from frame node constraints.
-        chain = self._member_nodes_along.get(member_id, [])
-        node_to_x = {nid: float(x) for x, nid in chain}
-        supports, supported_node_ids = _supports_from_chain(chain)
-
-        beam = Beam1D(L=parent.length, material=parent.material, section=parent.section, supports=supports)
-        lc = LoadCase(name=f"Member {member_id} extracted")
-
-        # Find which nodes have fixed supports in the original frame
-        fixed_node_ids = set()
-        for nid, node in self.original_frame.nodes.items():
-            if node.support and all(c == "1" for c in node.support):
-                fixed_node_ids.add(nid)
-        
-        # Add loads from nodal forces/moments on the member's nodes
-        for nf in self.loads.nodal_forces:
-            if nf.node_id in node_to_x:
-                x = node_to_x[nf.node_id]
-                f_g = nf.force if getattr(nf, "coords", "global") == "global" else self._get_reference_member(getattr(nf, "reference_member_id", None)).transformation_matrix.T @ nf.force
-                f_l = parent.transformation_matrix @ f_g
-                lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
-        
-        for nm in self.loads.nodal_moments:
-            if nm.node_id in node_to_x:
-                x = node_to_x[nm.node_id]
-                m_g = nm.moment if getattr(nm, "coords", "global") == "global" else self._get_reference_member(getattr(nm, "reference_member_id", None)).transformation_matrix.T @ nm.moment
-                m_l = parent.transformation_matrix @ m_g
-                lc.add_moment(Moment(x=x, moment=m_l))
-        
-        # Add loads from member-level point forces/moments
-        # Recombine loads across all segments back to original member coordinates
-        for mpf in self.loads.member_point_forces:
-            seg_id = mpf.member_id
-            if seg_id not in self._member_segment_parent:
-                continue
-            if self._member_segment_parent[seg_id] != member_id:
-                continue
-            # Convert segment-local position to original member-local position
-            x0 = float(self._member_segment_offset[seg_id])
-            # mpf.position is relative to the segment; convert to original member coordinates
-            x_in_segment = mpf.position * self.frame.get_member(seg_id).length if mpf.position_type == "relative" else mpf.position
-            x = x0 + x_in_segment
-            f_l = parent.transformation_matrix @ mpf.force if mpf.coords == "global" else mpf.force
-            lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=f_l))
-        
-        for mpm in getattr(self.loads, "member_point_moments", []):
-            seg_id = mpm.member_id
-            if seg_id not in self._member_segment_parent:
-                continue
-            if self._member_segment_parent[seg_id] != member_id:
-                continue
-            # Convert segment-local position to original member-local position
-            x0 = float(self._member_segment_offset[seg_id])
-            x_in_segment = mpm.position * self.frame.get_member(seg_id).length if mpm.position_type == "relative" else mpm.position
-            x = x0 + x_in_segment
-            m_l = parent.transformation_matrix @ mpm.moment if mpm.coords == "global" else mpm.moment
-            lc.add_moment(Moment(x=x, moment=m_l))
-        
-        # Add distributed member loads
-        for mdf in self.loads.member_distributed_forces:
-            seg_id = mdf.member_id
-            if seg_id not in self._member_segment_parent:
-                continue
-            if self._member_segment_parent[seg_id] != member_id:
-                continue
-            # Convert segment-local positions to original member-local positions
-            x0 = float(self._member_segment_offset[seg_id])
-            s_in_segment = float(mdf.start_position)
-            e_in_segment = float(mdf.end_position)
-            s_x = x0 + s_in_segment
-            e_x = x0 + e_in_segment
-            s_f_l = parent.transformation_matrix @ mdf.start_force if mdf.coords == "global" else mdf.start_force
-            e_f_l = parent.transformation_matrix @ mdf.end_force if mdf.coords == "global" else mdf.end_force
-            lc.add_distributed_force(DistributedForce(np.array([s_x, 0, 0]), np.array([e_x, 0, 0]), s_f_l, e_f_l))
-        
-        # Apply boundary loads at the member end only if that end is NOT modeled as a support.
-        # (Otherwise we'd be double-counting the restraint + the end forces.)
-        end_nid = parent.end_node_id
-
-        end_supported = (chain[-1][1] if chain else parent.end_node_id) in supported_node_ids
-
-        if (not end_supported) and (end_nid not in fixed_node_ids):
-            # Apply end forces and moments as negative (equilibrium)
-            lc.add_point_force(PointForce(point=np.array([parent.length, 0, 0]), force=-end_f[0:3]))
-            if any(abs(end_f[3:6]) > 1e-10):
-                lc.add_moment(Moment(x=parent.length, moment=-end_f[3:6]))
-        
-        # Check intermediate nodes for reactions and apply as loads only when NOT modeled as supports.
-        for x, nid in chain:
-            if x <= 1e-9 or x >= parent.length - 1e-9:
-                continue  # Skip start/end nodes already handled
-            if nid in supported_node_ids:
-                continue
-            if nid in self._reactions:
-                rxn = self._reactions[nid]
-                f_g = rxn[0:3]
-                m_g = rxn[3:6]
-                f_l = parent.transformation_matrix @ f_g
-                m_l = parent.transformation_matrix @ m_g
-                if any(abs(f_l) > 1e-10):
-                    lc.add_point_force(PointForce(point=np.array([x, 0, 0]), force=-f_l))
-                if any(abs(m_l) > 1e-10):
-                    lc.add_moment(Moment(x=x, moment=-m_l))
-        
-        return LoadedBeam(beam, lc)
-
-    def get_aisc_utilizations(self) -> Dict[str, float]:
+    def get_aisc_utilizations(self) -> Dict[str, float]:def get_aisc_utilizations(self) -> Dict[str, float]:
         """
         Compute AISC Chapter F utilization ratios for all original members.
 
@@ -1511,50 +1170,30 @@ class LoadedFrame:
             Dictionary mapping original member ID to its governing utilization ratio (0-1 scale).
             Utilization = max(bending utilizations, shear utilization).
         """
-        from ..beam1d.beam import Beam1D
-        from ..core.support import Support
         from ..core.results import Result
         from ..checks import aisc_9
+        from .results import MemberActionProfile
 
         utilizations: Dict[str, float] = {}
 
-        class _AiscActionAdapter:
-            """Minimal adapter to run AISC checks from precomputed internal actions."""
-
-            def __init__(self, beam: Beam1D, my: Result, mz: Result, vz: Result):
-                self.beam = beam
-                self._my = my
-                self._mz = mz
-                self._vz = vz
-
-            def bending(self, axis: str, points: int = 100):
-                # aisc_9 expects:
-                # - bending('y') -> strong-axis action paired with section.Sz
-                # - bending('z') -> weak-axis action paired with section.Sy
-                # In beamy frame results:
-                # - bending_y is My
-                # - bending_z is Mz
-                if axis == "y":
-                    return type("o", (), {"action": self._mz})()
-                return type("o", (), {"action": self._my})()
-
-            def shear(self, axis: str, points: int = 100):
-                # aisc_9 currently uses shear('z') only.
-                if axis == "z":
-                    return type("o", (), {"action": self._vz})()
-                return type("o", (), {"action": Result(self._vz._x, self._vz._values * 0.0)})()
-
         def _util_from_results(member: Member, my: Result, mz: Result, vz: Result) -> float:
-            # Supports are only used by aisc_9 for unbraced-length segmentation.
-            # Keep the existing conservative behavior: treat member as unbraced for full length.
-            beam = Beam1D(
-                L=member.length,
+            # The AISC checks support running directly on a MemberActionProfile.
+            # This avoids re-solving as a 1D beam and avoids the incorrect adapter->run() path.
+            xs = my._x
+            zeros = np.zeros_like(xs)
+            profile = MemberActionProfile(
+                member_id=member.id,
+                length=member.length,
                 material=member.material,
                 section=member.section,
-                supports=[Support(x=0.0, type="111111")],
+                axial=Result(xs, zeros),
+                shear_y=Result(xs, zeros),
+                shear_z=vz,
+                torsion=Result(xs, zeros),
+                bending_y=my,
+                bending_z=mz,
             )
-            adapter = _AiscActionAdapter(beam, my=my, mz=mz, vz=vz)
-            return float(aisc_9.run(adapter, length_unit="m", force_unit="N").utilisation)
+            return float(aisc_9.aisc_9_check(profile, length_unit="m", force_unit="N").utilisation)
 
         def _stitch_parent_results(parent_id: str) -> tuple[Result, Result, Result]:
             parent = self.original_frame.get_member(parent_id)

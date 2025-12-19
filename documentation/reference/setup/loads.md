@@ -154,7 +154,7 @@ moment2 = Moment(
 
 ## LoadCase
 
-Container for point forces, distributed forces, and moments.
+Container for point forces, distributed forces, and moments (for 1D beams).
 
 ```python
 from beamy import LoadCase
@@ -265,6 +265,423 @@ lc.add_moment(Moment(
 # Access force resultants
 print(lc.Fzs)  # List of (x, Fz) pairs
 print(lc.Mzs)  # List of (x, Mz) pairs
+```
+
+---
+
+## FrameLoadCase
+
+Loads applied to a 3D frame structure.
+
+```python
+from beamy.frame import FrameLoadCase
+
+@dataclass
+class FrameLoadCase:
+    name: str
+    nodal_forces: List[NodalForce] = field(default_factory=list)
+    nodal_moments: List[NodalMoment] = field(default_factory=list)
+    member_point_forces: List[MemberPointForce] = field(default_factory=list)
+    member_point_moments: List[MemberPointMoment] = field(default_factory=list)
+    member_distributed_forces: List[MemberDistributedForce] = field(default_factory=list)
+    nodal_springs: List[NodalSpring] = field(default_factory=list)
+```
+
+### Parameters
+
+- `name` (str): Identifier for the load case
+- `nodal_forces` (List[NodalForce]): Forces applied directly at nodes (default: empty list)
+- `nodal_moments` (List[NodalMoment]): Moments applied directly at nodes (default: empty list)
+- `member_point_forces` (List[MemberPointForce]): Point forces applied along members (default: empty list)
+- `member_point_moments` (List[MemberPointMoment]): Point moments applied along members (default: empty list)
+- `member_distributed_forces` (List[MemberDistributedForce]): Distributed forces along member segments (default: empty list)
+- `nodal_springs` (List[NodalSpring]): Elastic springs attached to nodes (default: empty list)
+
+### Methods
+
+#### `add_nodal_force(node_id: str, force: np.ndarray, coords: str = "global") -> None`
+
+Add a force at a node.
+
+**Parameters:**
+- `node_id` (str): Target node ID
+- `force` (np.ndarray): 3D force vector [FX, FY, FZ]
+- `coords` (str): Coordinate system, either `"global"` or `"local"` (default: `"global"`)
+
+#### `add_nodal_moment(node_id: str, moment: np.ndarray, coords: str = "global") -> None`
+
+Add a moment at a node.
+
+**Parameters:**
+- `node_id` (str): Target node ID
+- `moment` (np.ndarray): 3D moment vector [MX, MY, MZ]
+- `coords` (str): Coordinate system, either `"global"` or `"local"` (default: `"global"`)
+
+#### `add_member_point_force(member_id: str, position: float, force: np.ndarray, coords: str = "local", position_type: str = "absolute") -> None`
+
+Add a point force along a member.
+
+**Parameters:**
+- `member_id` (str): Target member ID
+- `position` (float): Distance from start node (if `position_type="absolute"`) or fraction of length (if `position_type="relative"`)
+- `force` (np.ndarray): 3D force vector [fx, fy, fz]
+- `coords` (str): Coordinate system, either `"local"` or `"global"` (default: `"local"`)
+- `position_type` (str): Either `"absolute"` (distance) or `"relative"` (fraction, 0 to 1) (default: `"absolute"`)
+
+#### `add_member_point_moment(member_id: str, position: float, moment: np.ndarray, coords: str = "local", position_type: str = "absolute") -> None`
+
+Add a point moment along a member.
+
+**Parameters:**
+- `member_id` (str): Target member ID
+- `position` (float): Distance from start node or fraction
+- `moment` (np.ndarray): 3D moment vector [mx, my, mz]
+- `coords` (str): Coordinate system, either `"local"` or `"global"` (default: `"local"`)
+- `position_type` (str): Either `"absolute"` or `"relative"` (default: `"absolute"`)
+
+#### `add_member_distributed_force(member_id: str, start_position: float, end_position: float, start_force: np.ndarray, end_force: np.ndarray, coords: str = "local") -> None`
+
+Add a distributed force along a member segment.
+
+**Parameters:**
+- `member_id` (str): Target member ID
+- `start_position` (float): Start distance from start node (length units)
+- `end_position` (float): End distance from start node (length units)
+- `start_force` (np.ndarray): Force intensity at start [fx, fy, fz] per unit length
+- `end_force` (np.ndarray): Force intensity at end [fx, fy, fz] per unit length
+- `coords` (str): Coordinate system, either `"local"` or `"global"` (default: `"local"`)
+
+#### `add_member_uniform_force(member_id: str, force: np.ndarray, coords: str = "local") -> None`
+
+Add a uniform distributed force over the entire member length.
+
+**Parameters:**
+- `member_id` (str): Target member ID
+- `force` (np.ndarray): Uniform force intensity [fx, fy, fz] per unit length
+- `coords` (str): Coordinate system, either `"local"` or `"global"` (default: `"local"`)
+
+#### `add_nodal_spring(node_id: str, K: np.ndarray, coords: str = "global") -> None`
+
+Add an elastic nodal spring (attached to ground).
+
+**Parameters:**
+- `node_id` (str): Target node ID
+- `K` (np.ndarray): 6×6 stiffness matrix in DOF basis [Ux, Uy, Uz, Rx, Ry, Rz]
+- `coords` (str): Coordinate system, either `"global"` or `"local"` (default: `"global"`)
+
+### Example
+
+```python
+from beamy.frame import FrameLoadCase
+import numpy as np
+
+loads = FrameLoadCase(name="Wind + Dead Load")
+
+# Point load at node D (global coordinates)
+loads.add_nodal_force("D", force=np.array([50000.0, 0.0, 0.0]))
+
+# Moment at node C
+loads.add_nodal_moment("C", moment=np.array([0.0, 0.0, 25000.0]))
+
+# Uniform dead load on beam (local z = down relative to beam)
+loads.add_member_uniform_force("beam1", force=np.array([0.0, 0.0, -5000.0]))
+
+# Varying distributed load (triangular)
+loads.add_member_distributed_force(
+    member_id="beam1",
+    start_position=0.0,
+    end_position=10.0,
+    start_force=np.array([0.0, 0.0, -10000.0]),
+    end_force=np.array([0.0, 0.0, -20000.0]),
+    coords="global"
+)
+
+# Point force along member
+loads.add_member_point_force(
+    member_id="col1",
+    position=3.0,
+    force=np.array([0.0, 5000.0, 0.0]),
+    coords="local"
+)
+
+# Nodal spring (elastic boundary condition)
+K_spring = np.diag([1e6, 1e6, 1e6, 1e5, 1e5, 1e5])
+loads.add_nodal_spring("A", K_spring)
+```
+
+---
+
+## NodalForce
+
+Force applied directly at a node in a 3D frame (in global coordinates).
+
+```python
+from beamy import NodalForce
+
+@dataclass
+class NodalForce:
+    node_id: str              # Target node ID
+    force: np.ndarray         # [FX, FY, FZ] in global coordinates
+    coords: str = "global"    # Coordinate system
+    reference_member_id: Optional[str] = None  # Required if coords="local"
+```
+
+### Parameters
+
+- `node_id` (str): ID of the target node
+- `force` (np.ndarray): 3D force vector [FX, FY, FZ] (force units)
+- `coords` (str): Coordinate system for the force, either `"global"` or `"local"` (default: `"global"`)
+- `reference_member_id` (str, optional): Member ID whose local axes are used for transformation (required if `coords="local"`)
+
+### Example
+
+```python
+import numpy as np
+from beamy import NodalForce
+
+# Global coordinates (most common)
+force1 = NodalForce(node_id="D", force=np.array([50000.0, 0.0, 0.0]))
+
+# Local coordinates (relative to a member)
+force2 = NodalForce(
+    node_id="C",
+    force=np.array([0.0, 0.0, -30000.0]),
+    coords="local",
+    reference_member_id="beam1"
+)
+```
+
+---
+
+## NodalMoment
+
+Moment applied directly at a node in a 3D frame (in global coordinates).
+
+```python
+from beamy import NodalMoment
+
+@dataclass
+class NodalMoment:
+    node_id: str                # Target node ID
+    moment: np.ndarray          # [MX, MY, MZ] in global coordinates
+    coords: str = "global"      # Coordinate system
+    reference_member_id: Optional[str] = None  # Required if coords="local"
+```
+
+### Parameters
+
+- `node_id` (str): ID of the target node
+- `moment` (np.ndarray): 3D moment vector [MX, MY, MZ] (force×length units)
+- `coords` (str): Coordinate system for the moment, either `"global"` or `"local"` (default: `"global"`)
+- `reference_member_id` (str, optional): Member ID whose local axes are used for transformation (required if `coords="local"`)
+
+### Example
+
+```python
+import numpy as np
+from beamy import NodalMoment
+
+moment = NodalMoment(
+    node_id="C",
+    moment=np.array([0.0, 0.0, 25000.0])  # Moment about global Z
+)
+```
+
+---
+
+## MemberPointForce
+
+Point force applied along a member in a 3D frame.
+
+```python
+from beamy import MemberPointForce
+
+@dataclass
+class MemberPointForce:
+    member_id: str            # Target member ID
+    position: float           # Distance from start node (absolute) or fraction (relative)
+    force: np.ndarray         # [fx, fy, fz] force vector
+    coords: str = "local"     # "local" or "global" coordinate system
+    position_type: str = "absolute"  # "absolute" (distance) or "relative" (fraction)
+```
+
+### Parameters
+
+- `member_id` (str): ID of the target member
+- `position` (float): Position along the member
+  - If `position_type="absolute"`: Distance from start node in length units
+  - If `position_type="relative"`: Fraction of member length (0 to 1)
+- `force` (np.ndarray): 3D force vector [fx, fy, fz]
+- `coords` (str): Coordinate system for the force, either `"local"` or `"global"` (default: `"local"`)
+- `position_type` (str): Position specification type, either `"absolute"` or `"relative"` (default: `"absolute"`)
+
+### Coordinate System
+
+- **Local coordinates**: Relative to member axes where x = along member, y and z perpendicular
+- **Global coordinates**: Relative to global XYZ frame
+
+### Example
+
+```python
+import numpy as np
+from beamy import MemberPointForce
+
+# Absolute position in local coordinates
+force1 = MemberPointForce(
+    member_id="beam1",
+    position=3.0,  # 3 length units from start
+    force=np.array([0.0, 0.0, -50000.0]),  # Downward force
+    coords="local",
+    position_type="absolute"
+)
+
+# Relative position (at midspan)
+force2 = MemberPointForce(
+    member_id="beam1",
+    position=0.5,  # Midspan
+    force=np.array([0.0, 0.0, -50000.0]),
+    coords="local",
+    position_type="relative"
+)
+
+# Global coordinates
+force3 = MemberPointForce(
+    member_id="col1",
+    position=2.0,
+    force=np.array([25000.0, 0.0, 0.0]),  # Lateral force in global X
+    coords="global"
+)
+```
+
+---
+
+## MemberDistributedForce
+
+Distributed force along a member segment in a 3D frame.
+
+```python
+from beamy import MemberDistributedForce
+
+@dataclass
+class MemberDistributedForce:
+    member_id: str
+    start_position: float     # Distance from start node
+    end_position: float       # Distance from start node
+    start_force: np.ndarray   # [fx, fy, fz] per unit length at start
+    end_force: np.ndarray     # [fx, fy, fz] per unit length at end
+    coords: str = "local"     # "local" or "global"
+```
+
+### Parameters
+
+- `member_id` (str): ID of the target member
+- `start_position` (float): Start distance from start node (length units)
+- `end_position` (float): End distance from start node (length units)
+- `start_force` (np.ndarray): Force intensity at start [fx, fy, fz] (force/length units)
+- `end_force` (np.ndarray): Force intensity at end [fx, fy, fz] (force/length units)
+- `coords` (str): Coordinate system, either `"local"` or `"global"` (default: `"local"`)
+
+### Behavior
+
+The distributed force varies linearly between `start_force` and `end_force`.
+
+### Example
+
+```python
+import numpy as np
+from beamy import MemberDistributedForce
+
+# Uniform distributed load
+load1 = MemberDistributedForce(
+    member_id="beam1",
+    start_position=0.0,
+    end_position=10.0,
+    start_force=np.array([0.0, 0.0, -5000.0]),  # 5 kN/m downward
+    end_force=np.array([0.0, 0.0, -5000.0])
+)
+
+# Triangular load (linearly varying)
+load2 = MemberDistributedForce(
+    member_id="beam1",
+    start_position=0.0,
+    end_position=10.0,
+    start_force=np.array([0.0, 0.0, -10000.0]),  # 10 kN/m at start
+    end_force=np.array([0.0, 0.0, -20000.0])     # 20 kN/m at end
+)
+
+# Partial member load
+load3 = MemberDistributedForce(
+    member_id="beam1",
+    start_position=2.0,
+    end_position=8.0,
+    start_force=np.array([0.0, 0.0, -3000.0]),
+    end_force=np.array([0.0, 0.0, -3000.0])
+)
+```
+
+---
+
+## NodalSpring
+
+Elastic nodal spring stiffness attached to ground at a node.
+
+```python
+from beamy import NodalSpring
+
+@dataclass
+class NodalSpring:
+    node_id: str              # Target node ID
+    K: np.ndarray             # 6×6 stiffness matrix
+    coords: str = "global"    # "global" or "local"
+    reference_member_id: Optional[str] = None  # Required if coords="local"
+```
+
+### Parameters
+
+- `node_id` (str): ID of the target node
+- `K` (np.ndarray): 6×6 stiffness matrix in DOF basis: [Ux, Uy, Uz, Rx, Ry, Rz]
+- `coords` (str): Coordinate system for the stiffness matrix, either `"global"` or `"local"` (default: `"global"`)
+- `reference_member_id` (str, optional): Member ID whose local axes are used for transformation (required if `coords="local"`)
+
+### Stiffness Matrix Layout
+
+```
+K = [
+    [K_uu,      ],     # Translational stiffness (3×3)
+    [      K_rr  ]     # Rotational stiffness (3×3)
+]
+
+Where:
+- K_uu: Diagonal or full 3×3 matrix for translations [Ux, Uy, Uz]
+- K_rr: Diagonal or full 3×3 matrix for rotations [Rx, Ry, Rz]
+```
+
+### Example
+
+```python
+import numpy as np
+from beamy import NodalSpring
+
+# Simple elastic support with different stiffnesses in each direction
+K_simple = np.diag([1e7, 1e7, 1e7, 1e6, 1e6, 1e6])
+spring1 = NodalSpring(node_id="A", K=K_simple)
+
+# Partially constrained spring (only vertical and torsional)
+K_partial = np.zeros((6, 6))
+K_partial[2, 2] = 1e7  # Uz
+K_partial[5, 5] = 1e5  # Rz
+spring2 = NodalSpring(node_id="B", K=K_partial)
+
+# Coupled translational-rotational stiffness (advanced)
+K_coupled = np.array([
+    [1e7, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 1e7, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 1e7, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 1e5, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 1e5, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 1e5]
+])
+spring3 = NodalSpring(node_id="C", K=K_coupled)
 ```
 
 ---
