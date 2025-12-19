@@ -20,6 +20,7 @@ from .solver import (
     ElementStiffnessScales,
     assemble_geometric_stiffness,
 )
+from ..core.math import build_transformation_matrix_12x12
 from .results import MemberResultsDirect
 
 
@@ -937,6 +938,67 @@ class LoadedFrame:
             self._add_member_distributed_force_to_vector(mdf, node_to_idx, F)
         return F
 
+    @staticmethod
+    def _beam_shape_functions(x: float, L: float) -> tuple[float, float, float, float]:
+        xi = x / L
+        n1 = 1.0 - 3.0 * xi ** 2 + 2.0 * xi ** 3
+        n2 = L * (xi - 2.0 * xi ** 2 + xi ** 3)
+        n3 = 3.0 * xi ** 2 - 2.0 * xi ** 3
+        n4 = L * (-xi ** 2 + xi ** 3)
+        return n1, n2, n3, n4
+
+    def _consistent_member_distributed_load(
+        self,
+        member: Member,
+        start_pos: float,
+        end_pos: float,
+        start_force_l: np.ndarray,
+        end_force_l: np.ndarray,
+        n_gauss: int = 5,
+    ) -> np.ndarray:
+        L = member.length
+        f_eq = np.zeros(12)
+        if end_pos <= start_pos:
+            return f_eq
+
+        xi, wi = np.polynomial.legendre.leggauss(n_gauss)
+        a = float(start_pos)
+        b = float(end_pos)
+        half = 0.5 * (b - a)
+        mid = 0.5 * (b + a)
+
+        for xg, wg in zip(xi, wi):
+            x = mid + half * xg
+            if b == a:
+                t = 0.0
+            else:
+                t = (x - a) / (b - a)
+            w_l = (1.0 - t) * start_force_l + t * end_force_l
+
+            n1_ax = 1.0 - x / L
+            n2_ax = x / L
+            n1, n2, n3, n4 = self._beam_shape_functions(x, L)
+
+            weight = wg * half
+
+            if abs(w_l[0]) > 0.0:
+                f_eq[0] += n1_ax * w_l[0] * weight
+                f_eq[6] += n2_ax * w_l[0] * weight
+
+            if abs(w_l[1]) > 0.0:
+                f_eq[1] += n1 * w_l[1] * weight
+                f_eq[5] += n2 * w_l[1] * weight
+                f_eq[7] += n3 * w_l[1] * weight
+                f_eq[11] += n4 * w_l[1] * weight
+
+            if abs(w_l[2]) > 0.0:
+                f_eq[2] += n1 * w_l[2] * weight
+                f_eq[4] += -n2 * w_l[2] * weight
+                f_eq[8] += n3 * w_l[2] * weight
+                f_eq[10] += -n4 * w_l[2] * weight
+
+        return f_eq
+
     def _add_member_point_force_to_vector(self, mpf, node_to_idx, F):
         m = self.frame.get_member(mpf.member_id)
         x = mpf.position * m.length if mpf.position_type == "relative" else mpf.position
@@ -955,17 +1017,27 @@ class LoadedFrame:
 
     def _add_member_distributed_force_to_vector(self, mdf, node_to_idx, F):
         m = self.frame.get_member(mdf.member_id)
-        n_pts = 11
-        xs = np.linspace(mdf.start_position, mdf.end_position, n_pts)
-        dx = (mdf.end_position - mdf.start_position) / (n_pts - 1) if n_pts > 1 else 0
-        for i, x in enumerate(xs):
-            t = (x - mdf.start_position) / (mdf.end_position - mdf.start_position) if mdf.end_position > mdf.start_position else 0
-            f_l = (1 - t) * mdf.start_force + t * mdf.end_force
-            w = 0.5 if (i == 0 or i == n_pts - 1) else 1.0
-            f_g = m.transformation_matrix.T @ (f_l * dx * w) if mdf.coords == "local" else (f_l * dx * w)
-            N1, N2 = 1 - x/m.length, x/m.length
-            F[node_to_idx[m.start_node_id]*6 : node_to_idx[m.start_node_id]*6+3] += N1 * f_g
-            F[node_to_idx[m.end_node_id]*6 : node_to_idx[m.end_node_id]*6+3] += N2 * f_g
+        if mdf.coords == "global":
+            s_f_l = m.transformation_matrix @ mdf.start_force
+            e_f_l = m.transformation_matrix @ mdf.end_force
+        else:
+            s_f_l = mdf.start_force
+            e_f_l = mdf.end_force
+
+        f_eq_local = self._consistent_member_distributed_load(
+            member=m,
+            start_pos=float(mdf.start_position),
+            end_pos=float(mdf.end_position),
+            start_force_l=s_f_l,
+            end_force_l=e_f_l,
+        )
+        T12 = build_transformation_matrix_12x12(m.transformation_matrix)
+        f_eq_global = T12.T @ f_eq_local
+
+        s_idx = node_to_idx[m.start_node_id] * 6
+        e_idx = node_to_idx[m.end_node_id] * 6
+        F[s_idx:s_idx + 6] += f_eq_global[0:6]
+        F[e_idx:e_idx + 6] += f_eq_global[6:12]
 
     @property
     def nodal_displacements(self) -> Dict[str, np.ndarray]: return self._nodal_displacements
