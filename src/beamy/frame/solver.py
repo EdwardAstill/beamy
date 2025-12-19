@@ -59,16 +59,28 @@ def apply_releases(k_local: np.ndarray, releases: str) -> np.ndarray:
     When a DOF is released, that DOF cannot transfer forces/moments.
     We zero out the corresponding rows and columns in the stiffness matrix.
     """
-    k_modified = k_local.copy()
-    
-    for i, release_char in enumerate(releases):
-        if release_char == '1':
-            # Zero out row and column for released DOF
-            k_modified[i, :] = 0.0
-            k_modified[:, i] = 0.0
-            # Add small diagonal value to prevent singularity
-            k_modified[i, i] = 1e-6
-    
+    released = [i for i, release_char in enumerate(releases) if release_char == "1"]
+    if not released:
+        return k_local.copy()
+
+    retained = [i for i in range(12) if i not in released]
+
+    k_rr = k_local[np.ix_(retained, retained)]
+    k_rf = k_local[np.ix_(retained, released)]
+    k_fr = k_local[np.ix_(released, retained)]
+    k_ff = k_local[np.ix_(released, released)]
+
+    if k_ff.size == 0:
+        k_condensed = k_rr
+    else:
+        k_ff_inv = np.linalg.pinv(k_ff)
+        k_condensed = k_rr - k_rf @ k_ff_inv @ k_fr
+
+    k_modified = np.zeros_like(k_local)
+    for i, gi in enumerate(retained):
+        for j, gj in enumerate(retained):
+            k_modified[gi, gj] = k_condensed[i, j]
+
     return k_modified
 
 def analyze_frame_geometry(
@@ -306,4 +318,3 @@ def assemble_geometric_stiffness(
                 Kg_global[dof_indices[i], dof_indices[j]] += kg_global[i, j]
 
     return Kg_global
-
