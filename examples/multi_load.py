@@ -10,7 +10,7 @@ from pathlib import Path
 from sectiony.library import i_section
 from beamy import (
     Beam1D, Material, Support, LoadCase, 
-    PointForce, DistributedForce, Moment, LoadedBeam, plot_beam_diagram
+    PointForce, DistributedForce, Moment, LoadedMember, plot_beam_diagram
 )
 
 # Create gallery directory
@@ -58,7 +58,7 @@ loads.add_moment(Moment(
 ))
 
 # 4. Solve
-lb = LoadedBeam(beam, loads)
+lb = LoadedMember(beam, loads)
 
 # 5. Get Results
 print("Multiple Load Types - Results:")

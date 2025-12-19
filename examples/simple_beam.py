@@ -8,7 +8,7 @@ Demonstrates basic beam setup, loading, and visualization.
 import numpy as np
 from pathlib import Path
 from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, plot_beam_diagram
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, plot_beam_diagram
 
 # Create gallery directory
 gallery_dir = Path("gallery")
@@ -38,7 +38,7 @@ loads.add_point_force(PointForce(
 ))
 
 # 4. Solve
-lb = LoadedBeam(beam, loads)
+lb = LoadedMember(beam, loads)
 
 # 5. Get Results
 print(f"Max Deflection: {lb.deflection('z').abs_max:.6f} m")

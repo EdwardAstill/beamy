@@ -11,7 +11,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 from sectiony.library import i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, StressPlotter
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, StressPlotter
 from beamy.analysis.beam_plotter import plot_beam_diagram
 
 # Create gallery directory
@@ -46,7 +46,7 @@ loads.add_point_force(PointForce(
 ))
 
 # 4. Solve
-lb = LoadedBeam(beam, loads)
+lb = LoadedMember(beam, loads)
 
 # 5. Find Critical Stress Location
 vm_results = lb.von_mises(points=200)

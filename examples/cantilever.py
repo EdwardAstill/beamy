@@ -8,7 +8,7 @@ Demonstrates fixed support and end loading.
 import numpy as np
 from pathlib import Path
 from sectiony.library import rhs
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, plot_beam_diagram
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, plot_beam_diagram
 
 # Create gallery directory
 gallery_dir = Path("gallery")
@@ -37,7 +37,7 @@ loads.add_point_force(PointForce(
 ))
 
 # 4. Solve
-lb = LoadedBeam(beam, loads)
+lb = LoadedMember(beam, loads)
 
 # 5. Get Results
 print("Cantilever Beam Results:")

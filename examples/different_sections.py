@@ -11,7 +11,7 @@ Shows how different sections affect beam behavior.
 import numpy as np
 from pathlib import Path
 from sectiony.library import i_section, rhs
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, plot_beam_diagram
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, plot_beam_diagram
 
 # Create gallery directory
 gallery_dir = Path("gallery")
@@ -37,7 +37,7 @@ supports = [
 print("=== I-Beam ===")
 section_ibeam = i_section(d=0.2, b=0.1, tf=0.01, tw=0.006, r=0.008)
 beam_ibeam = Beam1D(L=L, material=steel, section=section_ibeam, supports=supports)
-lb_ibeam = LoadedBeam(beam_ibeam, loads)
+lb_ibeam = LoadedMember(beam_ibeam, loads)
 
 print(f"Max Deflection: {lb_ibeam.deflection('z').abs_max:.6f} m")
 print(f"Max Bending Moment: {lb_ibeam.bending('z').action.abs_max:.2f} N⋅m")
@@ -53,7 +53,7 @@ plot_beam_diagram(
 print("\n=== Rectangular Hollow Section ===")
 section_rect = rhs(b=0.1, h=0.2, t=0.005, r=0.0)  # 100mm x 200mm RHS with 5mm wall
 beam_rect = Beam1D(L=L, material=steel, section=section_rect, supports=supports)
-lb_rect = LoadedBeam(beam_rect, loads)
+lb_rect = LoadedMember(beam_rect, loads)
 
 print(f"Max Deflection: {lb_rect.deflection('z').abs_max:.6f} m")
 print(f"Max Bending Moment: {lb_rect.bending('z').action.abs_max:.2f} N⋅m")

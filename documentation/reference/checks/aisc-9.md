@@ -2,7 +2,7 @@
 Summary of the AISC ASD 9th Edition Chapter F checks implemented in `src/beamy/checks/aisc_9.py`. All units are converted internally to ksi and inches.
 
 ## Inputs
-- `loaded_beam` (analysis result): solved `LoadedBeam` with bending and shear actions.
+- `loaded_beam` (analysis result): solved `LoadedMember` with bending and shear actions.
 - Units: `length_unit`, `force_unit` describing the model units.
 - Optional switches:
   - `channel_major_axis` (default True): channels with Lb > Lc use Eq. F1-8 only.

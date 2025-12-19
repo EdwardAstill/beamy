@@ -27,7 +27,6 @@ from sectiony.library import rhs, chs
 
 from beamy import Material
 from beamy.frame import Frame, FrameBuilder, FrameLoadCase, LoadedFrame
-from beamy.core.support import Support
 
 
 @dataclass(frozen=True)
@@ -271,7 +270,7 @@ def run_case(
     loaded = LoadedFrame(frame, loads)
     _print_reactions(loaded)
 
-    # === Write per-member LoadedBeam information to tf/outputs/members.txt ===
+    # === Write per-member LoadedMember information to tf/outputs/members.txt ===
     def _fmt_vec(v: np.ndarray) -> str:
         return f"[{float(v[0]):.3f}, {float(v[1]):.3f}, {float(v[2]):.3f}]"
 
@@ -335,11 +334,10 @@ def run_case(
                 except Exception:
                     pass
 
-                # AISC utilisation using DIRECT FRAME ANALYSIS method (MemberActionProfile)
+                # AISC utilisation using DIRECT FRAME ANALYSIS method
                 # This uses equilibrium from recovered frame end forces + distributed loads,
                 # NOT re-solving each member as a 1D beam with extracted boundary conditions.
                 from beamy.checks import aisc_9
-                from beamy.frame.results import MemberActionProfile
 
                 util_overall = 0.0
                 util_bend = []

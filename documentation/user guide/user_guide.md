@@ -12,7 +12,7 @@ Here is a complete example of setting up a simply supported beam with a point lo
 
 ```python
 import numpy as np
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember
 from sectiony.library import i_section
 
 # 1. Define Properties
@@ -40,7 +40,7 @@ case = LoadCase(name="Design Load")
 case.add_point_force(load)
 
 # 4. Solve
-lb = LoadedBeam(beam, case)
+lb = LoadedMember(beam, case)
 
 # 5. Get Results
 # Results use the same units as your inputs
@@ -110,10 +110,10 @@ lc.add_distributed_force(DistributedForce(
 ```
 
 ### 4. Analysis
-The `LoadedBeam` class automatically solves for reactions and internal forces upon initialization.
+The `LoadedMember` class automatically solves for reactions and internal forces upon initialization.
 
 ```python
-lb = LoadedBeam(beam, load_case)
+lb = LoadedMember(beam, load_case)
 ```
 
 You can query specific behaviors using these methods:

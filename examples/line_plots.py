@@ -1,6 +1,6 @@
 import numpy as np
 from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam, DistributedForce
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember, DistributedForce
 from beamy.analysis import plot_analysis_results
 from pathlib import Path
 
@@ -61,7 +61,7 @@ loads.add_moment(Moment(
 
 # 3. Analyze and Plot
 # ---------------------------------------------
-lb = LoadedBeam(beam, loads)
+lb = LoadedMember(beam, loads)
 
 # Create gallery directory if it doesn't exist
 gallery_dir = Path("gallery")

@@ -1,6 +1,6 @@
 import numpy as np
 from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam, DistributedForce, plot_beam_diagram
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember, DistributedForce, plot_beam_diagram
 
 # Create an I-beam section
 # d=200mm depth, b=100mm width, tf=10mm flange, tw=6mm web, r=8mm fillet
@@ -38,7 +38,7 @@ loads.add_distributed_force(DistributedForce(
 ))
 
 # Create loaded beam (solves for reactions)
-lb = LoadedBeam(beam, loads)
+lb = LoadedMember(beam, loads)
 
 # Find the location of maximum Von Mises stress
 vm_results = lb.von_mises(points=200)  # Use more points for better resolution

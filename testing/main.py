@@ -10,7 +10,7 @@ if str(src_path) not in sys.path:
 import numpy as np
 from beamy.setup import Beam1D, Material, Support, LoadCase, PointForce
 from beamy.section import Section, Geometry, Shape
-from beamy.analysis import LoadedBeam
+from beamy.analysis import LoadedMember
 
 def main():
     # 1. Define Properties
@@ -61,7 +61,7 @@ def main():
     lc.add_point_force(load)
 
     # 4. Solve
-    lb = LoadedBeam(beam, lc)
+    lb = LoadedMember(beam, lc)
 
     # 5. Output Results
     print("All Loads (Applied + Reactions):")

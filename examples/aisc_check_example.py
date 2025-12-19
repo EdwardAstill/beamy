@@ -14,7 +14,7 @@ This example shows:
 
 import numpy as np
 from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, DistributedForce, LoadedBeam
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, DistributedForce, LoadedMember
 
 
 def main() -> None:
@@ -59,7 +59,7 @@ def main() -> None:
         force=np.array([0.0, 0.0, -15_000.0])
     ))
 
-    loaded_beam = LoadedBeam(beam, loads)
+    loaded_beam = LoadedMember(beam, loads)
     results = loaded_beam.check_aisc_chapter_f(length_unit="m", force_unit="N")
 
     print(f"AISC Check Results for {loaded_beam.beam.section.name}:")

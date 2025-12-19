@@ -16,7 +16,7 @@ from beamy.analysis import (
     get_all_loads,
     Result,
     AnalysisResult,
-    LoadedBeam,
+    LoadedMember,
 )
 from beamy.analysis.analysis import (
     _solve_fem_1d,
@@ -309,8 +309,8 @@ def test_get_all_loads():
 
 
 def test_loaded_beam_basic():
-    """Test LoadedBeam basic functionality."""
-    print("Testing LoadedBeam (basic)...")
+    """Test LoadedMember basic functionality."""
+    print("Testing LoadedMember (basic)...")
     
     material = Material(name="Steel", E=200e9, G=80e9)
     section = Section(
@@ -336,7 +336,7 @@ def test_loaded_beam_basic():
         force=np.array([100.0, 0.0, -1000.0])
     ))
     
-    loaded_beam = LoadedBeam(beam, loads)
+    loaded_beam = LoadedMember(beam, loads)
     
     # Check that all_loads was populated
     assert len(loaded_beam.all_loads) > 0
@@ -358,12 +358,12 @@ def test_loaded_beam_basic():
     deflection = loaded_beam.deflection("z", points=10)
     assert isinstance(deflection, Result)
     
-    print("  [PASS] LoadedBeam basic tests passed")
+    print("  [PASS] LoadedMember basic tests passed")
 
 
 def test_loaded_beam_equilibrium():
-    """Test that LoadedBeam maintains equilibrium."""
-    print("Testing LoadedBeam equilibrium...")
+    """Test that LoadedMember maintains equilibrium."""
+    print("Testing LoadedMember equilibrium...")
     
     material = Material(name="Steel", E=200e9, G=80e9)
     section = Section(
@@ -390,7 +390,7 @@ def test_loaded_beam_equilibrium():
         force=np.array([0.0, 0.0, -1000.0])
     ))
     
-    loaded_beam = LoadedBeam(beam, loads)
+    loaded_beam = LoadedMember(beam, loads)
     
     # Check force equilibrium in z-direction
     total_applied = sum(v for x, t, v in loaded_beam.all_loads if t == "Fz")
@@ -399,7 +399,7 @@ def test_loaded_beam_equilibrium():
     # Applied + reactions should sum to zero
     assert abs(total_applied + total_reactions) < 1e-3
     
-    print("  [PASS] LoadedBeam equilibrium tests passed")
+    print("  [PASS] LoadedMember equilibrium tests passed")
 
 
 def test_von_mises():
@@ -431,7 +431,7 @@ def test_von_mises():
         force=np.array([1000.0, 1000.0, -1000.0])
     ))
     
-    loaded_beam = LoadedBeam(beam, loads)
+    loaded_beam = LoadedMember(beam, loads)
     
     vm_res = loaded_beam.von_mises(points=11)
     

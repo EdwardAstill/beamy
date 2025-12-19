@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sectiony.library import i_section
 from sectiony.stress import Stress
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember
 
 def test_section_stress():
     # 1. Setup Beam
@@ -37,7 +37,7 @@ def test_section_stress():
         moment=np.array([1000, 5000, -2000]) # Mx=1kNm(Torque), My=5kNm, Mz=-2kNm
     ))
     
-    lb = LoadedBeam(beam, loads)
+    lb = LoadedMember(beam, loads)
     
     # 3. Analyze at specific location x_loc
     x_loc = 1.4 # Just before the load

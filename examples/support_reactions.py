@@ -7,7 +7,7 @@ for a beam with multiple supports and complex loading.
 
 import numpy as np
 from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember
 
 # 1. Define Material and Section
 steel = Material(name="Steel", E=200e9, G=80e9)
@@ -63,7 +63,7 @@ lc.add_moment(Moment(
 ))
 
 # 4. Analyze
-lb = LoadedBeam(beam, lc)
+lb = LoadedMember(beam, lc)
 
 # 5. Access and Print Reactions
 print("\n--- Support Reactions ---\n")

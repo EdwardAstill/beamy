@@ -19,7 +19,7 @@ from beamy.analysis.beam_plotter import plot_beam_diagram
 from beamy import plot_beam_diagram  # Available via __init__.py
 
 def plot_beam_diagram(
-    loaded_beam: LoadedBeam,
+    loaded_beam: LoadedMember,
     plot_stress: bool = False,
     plot_section: bool = True,
     save_path: Optional[str] = None
@@ -33,7 +33,7 @@ def plot_beam_diagram(
     - Supports as hollow circles with labels
     
     Args:
-        loaded_beam: LoadedBeam object containing beam, loads, and analysis results
+        loaded_beam: LoadedMember object containing beam, loads, and analysis results
         plot_stress: If True, color the beam axis by von Mises stress
         plot_section: If True, draw the section outline at x=0
         save_path: If provided, save the plot to this file path instead of showing it
@@ -42,7 +42,7 @@ def plot_beam_diagram(
 
 ### Parameters
 
-- `loaded_beam` (LoadedBeam): LoadedBeam object containing beam, loads, and analysis results
+- `loaded_beam` (LoadedMember): LoadedMember object containing beam, loads, and analysis results
 - `plot_stress` (bool): If True, color the beam axis by von Mises stress (default: False)
 - `plot_section` (bool): If True, draw the section outline at x=0 (default: True)
 - `save_path` (str, optional): If provided, saves the plot to this file path instead of displaying it. Uses `bbox_inches='tight'` and `dpi=300` for high-quality output.
@@ -82,7 +82,7 @@ This mapping provides a natural view where:
 ### Example
 
 ```python
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember
 from beamy.analysis.beam_plotter import plot_beam_diagram
 from sectiony.library import i_section
 import numpy as np
@@ -108,7 +108,7 @@ lc.add_point_force(PointForce(
 ))
 
 # Create loaded beam
-loaded_beam = LoadedBeam(beam, lc)
+loaded_beam = LoadedMember(beam, lc)
 
 # Plot with stress visualization
 plot_beam_diagram(loaded_beam, plot_stress=True, plot_section=True)

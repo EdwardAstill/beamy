@@ -6,7 +6,7 @@ Reference documentation for beam analysis functions and result classes.
 
 - [Result](#result)
 - [AnalysisResult](#analysisresult)
-- [LoadedBeam](#loadedbeam)
+- [LoadedMember](#LoadedMember)
 - [LoadedFrame](#loadedframe)
 - [MemberResults](#memberresults)
 - [solve_x_reactions](#solve_x_reactions)
@@ -109,7 +109,7 @@ class AnalysisResult:
 ### Example
 
 ```python
-# Get analysis result from LoadedBeam
+# Get analysis result from LoadedMember
 result = loaded_beam.shear(axis="z", points=100)
 
 # Access action (shear force)
@@ -127,22 +127,22 @@ print(displacement.min)  # Minimum displacement
 
 ---
 
-## LoadedBeam
+## LoadedMember
 
 Main analysis class that combines a beam with loads and provides analysis methods.
 
 ```python
-from beamy import LoadedBeam
+from beamy import LoadedMember
 
 @dataclass
-class LoadedBeam:
+class LoadedMember:
     beam: Beam1D
     loads: LoadCase
 ```
 
 ### Initialization
 
-When a `LoadedBeam` is created, it automatically:
+When a `LoadedMember` is created, it automatically:
 1. Solves for support reactions in all directions (x, y, z, rotations)
 2. Combines applied loads with support reactions
 3. Stores the complete load set for analysis
@@ -236,7 +236,7 @@ Plot the 3D beam diagram with loads and optional stress visualization.
 ### Example
 
 ```python
-from beamy import Beam1D, Material, Section, Support, LoadCase, PointForce, LoadedBeam
+from beamy import Beam1D, Material, Section, Support, LoadCase, PointForce, LoadedMember
 import numpy as np
 
 # Define beam
@@ -264,7 +264,7 @@ lc.add_point_force(PointForce(
 ))
 
 # Create loaded beam and analyze
-loaded_beam = LoadedBeam(beam, lc)
+loaded_beam = LoadedMember(beam, lc)
 
 # Shear analysis
 shear_result = loaded_beam.shear(axis="z", points=100)
@@ -357,17 +357,17 @@ Get detailed analysis results for a specific member.
 **Returns:**
 - `MemberResults`: Object containing stress, force, and displacement distributions
 
-#### `to_loaded_beams(self) -> Dict[str, LoadedBeam]`
+#### `to_loaded_beams(self) -> Dict[str, LoadedMember]`
 
-Convert frame analysis to individual LoadedBeam objects.
+Convert frame analysis to individual LoadedMember objects.
 
-Each member is converted to a LoadedBeam with:
+Each member is converted to a LoadedMember with:
 - Member end forces as support reactions
 - Any intermediate member loads applied
 - Local coordinate system orientation
 
 **Returns:**
-- `Dict[str, LoadedBeam]`: Dictionary mapping member ID to LoadedBeam object
+- `Dict[str, LoadedMember]`: Dictionary mapping member ID to LoadedMember object
 
 ### Visualization Methods
 
@@ -529,7 +529,7 @@ loaded_frame.plot_deflection(scale_factor=100, colormap="viridis", save_path="de
 loaded_frame.plot_von_mises(colormap="jet", save_path="stress.svg")
 loaded_frame.plot_member_diagrams("beam", save_path="diagrams.svg")
 
-# Convert to LoadedBeam objects for code checks
+# Convert to LoadedMember objects for code checks
 loaded_beams = loaded_frame.to_loaded_beams()
 for member_id, lb in loaded_beams.items():
     result = lb.check_aisc_chapter_f("m", "N")
@@ -807,10 +807,10 @@ def get_all_loads(
 ### Example
 
 ```python
-from beamy import get_all_loads, LoadedBeam
+from beamy import get_all_loads, LoadedMember
 
 # Create loaded beam (reactions are computed automatically)
-loaded_beam = LoadedBeam(beam, load_case)
+loaded_beam = LoadedMember(beam, load_case)
 
 # Get all loads (applied + reactions)
 all_loads = get_all_loads(load_case, beam)
@@ -833,7 +833,7 @@ Plots the analysis results (Shear, Moment, Deflection, Axial/Torsion) on 2D line
 from beamy import plot_analysis_results
 
 def plot_analysis_results(
-    loaded_beam: LoadedBeam, 
+    loaded_beam: LoadedMember, 
     save_path: Optional[str] = None, 
     show: bool = True, 
     points: int = 100
@@ -845,7 +845,7 @@ def plot_analysis_results(
 
 ### Parameters
 
-- `loaded_beam` (LoadedBeam): The analyzed LoadedBeam object.
+- `loaded_beam` (LoadedMember): The analyzed LoadedMember object.
 - `save_path` (str, optional): Path to save the figure.
 - `show` (bool): Whether to display the plot.
 - `points` (int): Number of points to sample.
@@ -874,9 +874,9 @@ Typical workflow for analyzing a beam:
    lc.add_distributed_force(...)
    ```
 
-3. **Create LoadedBeam** (automatically solves for reactions)
+3. **Create LoadedMember** (automatically solves for reactions)
    ```python
-   loaded_beam = LoadedBeam(beam, lc)
+   loaded_beam = LoadedMember(beam, lc)
    ```
 
 4. **Perform analysis**

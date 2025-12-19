@@ -4,13 +4,11 @@ from typing import Dict, Tuple, Optional, List, Set, TYPE_CHECKING, Literal
 import numpy as np
 
 if TYPE_CHECKING:
-    from beamy.beam1d.analysis import LoadedBeam
+    pass
+
 
 from .frame import Frame
-from ..core.loads import (
-    FrameLoadCase,
-    PointForce, Moment, DistributedForce, LoadCase
-)
+from ..core.loads import FrameLoadCase
 from .member import Member
 from .node import Node
 from .solver import (
@@ -1125,7 +1123,7 @@ class LoadedFrame:
             return self.analysis_result.demand_provider
         raise RuntimeError("Demand provider is available after analysis is complete.")
 
-    def get_member_results(self, member_id: str) -> MemberResultsDirect:def get_member_results(self, member_id: str) -> MemberResultsDirect:
+    def get_member_results(self, member_id: str) -> MemberResultsDirect:
         """
         Get internal force results for a member using direct equilibrium computation.
         
@@ -1156,7 +1154,7 @@ class LoadedFrame:
             member_loads=member_loads,
         )
 
-    def get_aisc_utilizations(self) -> Dict[str, float]:def get_aisc_utilizations(self) -> Dict[str, float]:
+    def get_aisc_utilizations(self) -> Dict[str, float]:
         """
         Compute AISC Chapter F utilization ratios for all original members.
 

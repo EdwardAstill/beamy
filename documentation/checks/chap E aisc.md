@@ -266,7 +266,7 @@ The axial compression check is implemented in the codebase as:
 
 - [src/beamy/checks/aisc_9.py](src/beamy/checks/aisc_9.py)
 
-Usage on a 1D extracted member (a `LoadedBeam`):
+Usage on a 1D extracted member (a `LoadedMember`):
 
 - `loaded_beam.check_aisc_chapter_e(length_unit="m", force_unit="N", K=1.0)`
 - Optional bracing segmentation: `unbraced_positions=[0.0, 0.9, 1.8]`

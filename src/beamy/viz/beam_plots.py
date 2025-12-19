@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 import numpy as np
 
 if TYPE_CHECKING:
-    from ..beam1d.analysis import LoadedBeam
+    from ..beam1d.analysis import LoadedMember
     from ..core.support import Support
     from sectiony import Section
 
@@ -98,8 +98,8 @@ def _plot_moments(ax, moments, beam_L):
     if all_s: ax.add_collection3d(Poly3DCollection(all_s, facecolor='blue', edgecolor='blue'))
     if all_b: ax.add_collection3d(Poly3DCollection(all_b, facecolor='#4444dd', edgecolor='#4444dd'))
 
-def plot_beam_diagram(loaded_beam: LoadedBeam, plot_stress=False, plot_section=True, plot_supports=True, save_path=None):
-    beam, loads = loaded_beam.beam, loaded_beam.loads
+def plot_beam_diagram(loaded_member: LoadedMember, plot_stress=False, plot_section=True, plot_supports=True, save_path=None):
+    beam, loads = loaded_member.beam, loaded_member.loads
     fig = plt.figure(figsize=(12, 8)); ax = fig.add_subplot(111, projection='3d')
     sc_y, sc_z = getattr(beam.section, 'SCy', 0.0), getattr(beam.section, 'SCz', 0.0)
     if plot_section and beam.section.geometry:
@@ -109,7 +109,7 @@ def plot_beam_diagram(loaded_beam: LoadedBeam, plot_stress=False, plot_section=T
             ax.plot(z, np.zeros_like(z), y, color='grey', lw=1.5)
             ax.add_collection3d(Poly3DCollection([list(zip(z, np.zeros_like(z), y))], facecolor='grey', alpha=0.3))
     if plot_stress:
-        res = loaded_beam.von_mises(100)
+        res = loaded_member.von_mises(100)
         pts = np.array([[0, x, 0] for x in res._x])
         segments = np.array([[pts[i], pts[i+1]] for i in range(len(pts)-1)])
         norm = Normalize(vmin=res.min(), vmax=res.max())
@@ -136,20 +136,20 @@ def plot_beam_diagram(loaded_beam: LoadedBeam, plot_stress=False, plot_section=T
     if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300); plt.close(fig)
     else: plt.show()
 
-def plot_analysis_results(loaded_beam: LoadedBeam, save_path=None, show=True, points=100, units=None):
+def plot_analysis_results(loaded_member: LoadedMember, save_path=None, show=True, points=100, units=None):
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 8))
     u = units or {}
     ul, uf, um, ud = [f" ({u[k]})" if k in u else "" for k in ['length', 'force', 'moment', 'deflection']]
-    sy, sz = loaded_beam.shear("y", points), loaded_beam.shear("z", points)
+    sy, sz = loaded_member.shear("y", points), loaded_member.shear("z", points)
     ax1.plot(sy.action._x, sy.action._values, label="y-axis"); ax1.plot(sz.action._x, sz.action._values, label="z-axis", ls="--")
     ax1.set_title("Shear Force"); ax1.set_xlabel(f"Position{ul}"); ax1.set_ylabel(f"Force{uf}"); ax1.legend(); ax1.grid(True, ls=':', alpha=0.6); ax1.axhline(0, c='k', lw=0.5)
-    by, bz = loaded_beam.bending("y", points), loaded_beam.bending("z", points)
+    by, bz = loaded_member.bending("y", points), loaded_member.bending("z", points)
     ax2.plot(by.action._x, by.action._values, label="z-axis"); ax2.plot(bz.action._x, bz.action._values, label="y-axis", ls="--")
     ax2.set_title("Bending Moment"); ax2.set_xlabel(f"Position{ul}"); ax2.set_ylabel(f"Moment{um}"); ax2.legend(); ax2.grid(True, ls=':', alpha=0.6); ax2.axhline(0, c='k', lw=0.5)
-    dy, dz = loaded_beam.deflection("y", points), loaded_beam.deflection("z", points)
+    dy, dz = loaded_member.deflection("y", points), loaded_member.deflection("z", points)
     ax3.plot(dy._x, dy._values, label="y-axis"); ax3.plot(dz._x, dz._values, label="z-axis", ls="--")
     ax3.set_title("Deflection"); ax3.set_xlabel(f"Position{ul}"); ax3.set_ylabel(f"Displacement{ud}"); ax3.legend(); ax3.grid(True, ls=':', alpha=0.6); ax3.axhline(0, c='k', lw=0.5)
-    ax_res, tor = loaded_beam.axial(points), loaded_beam.torsion(points)
+    ax_res, tor = loaded_member.axial(points), loaded_member.torsion(points)
     l1 = ax4.plot(ax_res.action._x, ax_res.action._values, label="Axial Force", color="red"); ax4.set_ylabel(f"Axial Force{uf}", color="red")
     ax4_r = ax4.twinx(); l2 = ax4_r.plot(tor.action._x, tor.action._values, label="Torsion", color="purple", ls="--"); ax4_r.set_ylabel(f"Torsion Moment{um}", color="purple")
     ax4.set_title("Axial Force & Torsion"); ax4.set_xlabel(f"Position{ul}"); ax4.grid(True, ls=':', alpha=0.6); ax4.axhline(0, c='k', lw=0.5)
@@ -160,20 +160,20 @@ def plot_analysis_results(loaded_beam: LoadedBeam, save_path=None, show=True, po
 
 class StressPlotter:
     """Plots stress distributions on the beam's cross-section."""
-    def __init__(self, loaded_beam: LoadedBeam):
-        self.loaded_beam = loaded_beam
-        self.beam = loaded_beam.beam
+    def __init__(self, loaded_member: LoadedMember):
+        self.loaded_member = loaded_member
+        self.beam = loaded_member.beam
 
     def _get_internal_forces_at(self, x_pos: float) -> dict[str, float]:
         def get_val(analysis_res, x):
             return np.interp(x, analysis_res.action._x, analysis_res.action._values)
         return {
-            "N": get_val(self.loaded_beam.axial(), x_pos),
-            "Vy": get_val(self.loaded_beam.shear("y"), x_pos),
-            "Vz": get_val(self.loaded_beam.shear("z"), x_pos),
-            "Mx": get_val(self.loaded_beam.torsion(), x_pos),
-            "My": get_val(self.loaded_beam.bending("z"), x_pos),
-            "Mz": get_val(self.loaded_beam.bending("y"), x_pos)
+            "N": get_val(self.loaded_member.axial(), x_pos),
+            "Vy": get_val(self.loaded_member.shear("y"), x_pos),
+            "Vz": get_val(self.loaded_member.shear("z"), x_pos),
+            "Mx": get_val(self.loaded_member.torsion(), x_pos),
+            "My": get_val(self.loaded_member.bending("z"), x_pos),
+            "Mz": get_val(self.loaded_member.bending("y"), x_pos)
         }
 
     def plot_stress_at(self, x_pos: float, stress_type="von_mises", ax=None, show=True, cmap="viridis", title=None):

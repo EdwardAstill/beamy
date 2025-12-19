@@ -7,7 +7,7 @@ from .core.loads import (
     LoadCase, FrameLoadCase, NodalSpring
 )
 from .beam1d.beam import Beam1D
-from .beam1d.analysis import LoadedBeam
+from .beam1d.analysis import LoadedMember
 from .frame.node import Node
 from .frame.member import Member
 from .frame.frame import Frame
@@ -36,7 +36,7 @@ __all__ = [
     "PointForce", "Moment", "DistributedForce",
     "NodalForce", "NodalMoment", "MemberPointForce", "MemberDistributedForce",
     "LoadCase", "FrameLoadCase", "NodalSpring",
-    "Beam1D", "LoadedBeam",
+    "Beam1D", "LoadedMember",
     "Node", "Member", "Frame", "LoadedFrame", "MemberResults",
     "FrameAnalysisSettings", "FrameAnalysisResult", "StabilizationReport",
     "ElementStiffnessScales",

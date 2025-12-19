@@ -27,7 +27,7 @@ Plots a 3D beam diagram with section outline, loads, supports, and optional stre
 from beamy import plot_beam_diagram
 
 def plot_beam_diagram(
-    loaded_beam: LoadedBeam,
+    loaded_beam: LoadedMember,
     plot_stress: bool = False,
     plot_section: bool = True,
     save_path: Optional[str] = None
@@ -44,7 +44,7 @@ def plot_beam_diagram(
 
 ### Parameters
 
-- `loaded_beam` (LoadedBeam): LoadedBeam object containing beam, loads, and analysis results
+- `loaded_beam` (LoadedMember): LoadedMember object containing beam, loads, and analysis results
 - `plot_stress` (bool): If True, color the beam axis by von Mises stress (default: False)
 - `plot_section` (bool): If True, draw the section outline at x=0 (default: True)
 - `save_path` (str, optional): If provided, saves the plot to this file path (high-quality .svg output)
@@ -68,7 +68,7 @@ def plot_beam_diagram(
 ### Example
 
 ```python
-from beamy import Beam1D, Material, LoadedBeam, LoadCase, PointForce
+from beamy import Beam1D, Material, LoadedMember, LoadCase, PointForce
 from beamy import plot_beam_diagram
 from sectiony.library import i_section
 import numpy as np
@@ -89,7 +89,7 @@ lc.add_point_force(PointForce(
 ))
 
 # Plot
-loaded_beam = LoadedBeam(beam, lc)
+loaded_beam = LoadedMember(beam, lc)
 plot_beam_diagram(loaded_beam, plot_stress=True, save_path="beam.svg")
 ```
 
@@ -365,7 +365,7 @@ Plots analysis results (shear, moment, deflection, axial/torsion) as 2D line gra
 from beamy import plot_analysis_results
 
 def plot_analysis_results(
-    loaded_beam: LoadedBeam,
+    loaded_beam: LoadedMember,
     save_path: Optional[str] = None,
     show: bool = True,
     points: int = 100
@@ -375,7 +375,7 @@ def plot_analysis_results(
 
 ### Parameters
 
-- `loaded_beam` (LoadedBeam): Analyzed beam object
+- `loaded_beam` (LoadedMember): Analyzed beam object
 - `save_path` (str, optional): Save path
 - `show` (bool): Display the plot (default: True)
 - `points` (int): Number of sample points (default: 100)

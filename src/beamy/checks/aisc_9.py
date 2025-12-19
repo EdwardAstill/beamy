@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 from unity.core import conv
 
-from ..beam1d.analysis import LoadedBeam
+from ..beam1d.analysis import LoadedMember
 from ..beam1d.beam import Beam1D
 from ..core.support import Support
 from ..core.results import Result
@@ -396,7 +396,7 @@ def _shear_checks(shear_res: Result, dims_info: Dict[str, Any], Fy: float, stiff
     return ShearResult(vmax, cap, cap >= vmax, Fv=fv, slenderness_h_over_tw=(h / tw if (h and tw) else None))
 
 
-def _profile_from_loaded_beam(loaded_beam: LoadedBeam) -> MemberActionProfile:
+def _profile_from_loaded_beam(loaded_beam: LoadedMember) -> MemberActionProfile:
     beam = loaded_beam.beam
     try:
         torsion_action = loaded_beam.torsion().action
@@ -422,7 +422,7 @@ def _profile_from_loaded_beam(loaded_beam: LoadedBeam) -> MemberActionProfile:
 # -----------------------------------------------------------------------------
 
 def aisc_9_check(
-    subject: Union[LoadedBeam, MemberActionProfile],
+    subject: Union[LoadedMember, MemberActionProfile],
     length_unit: str,
     force_unit: str,
     *,
@@ -589,7 +589,7 @@ def _compute_cm(M1: float, M2: float, frame_type: str, has_transverse_loading: b
 
 
 def aisc_chapter_h_check(
-    subject: Union[LoadedBeam, MemberActionProfile],
+    subject: Union[LoadedMember, MemberActionProfile],
     length_unit: str,
     force_unit: str,
     *,
@@ -606,7 +606,7 @@ def aisc_chapter_h_check(
     """ASD Chapter H: Combined axial force and bending (interaction).
     
     Args:
-        subject: LoadedBeam or MemberActionProfile with axial and bending results
+        subject: LoadedMember or MemberActionProfile with axial and bending results
         length_unit: Unit for lengths (e.g., "m", "ft", "in")
         force_unit: Unit for forces (e.g., "N", "kip", "lbf")
         Ky: Effective length factor for buckling about y-axis (strong axis)
@@ -857,7 +857,7 @@ def aisc_chapter_h_check(
 
 
 def aisc_chapter_e_check(
-    loaded_beam: Union[LoadedBeam, MemberActionProfile],
+    loaded_beam: Union[LoadedMember, MemberActionProfile],
     length_unit: str,
     force_unit: str,
     *,
@@ -869,7 +869,7 @@ def aisc_chapter_e_check(
 
     This is axial-only. For combined P+M interaction, use Chapter H.
     """
-    beam = loaded_beam.beam if isinstance(loaded_beam, LoadedBeam) else None
+    beam = loaded_beam.beam if isinstance(loaded_beam, LoadedMember) else None
     material = beam.material if beam else loaded_beam.material
     section = beam.section if beam else loaded_beam.section
     length_native = beam.L if beam else loaded_beam.length
@@ -943,7 +943,7 @@ def aisc_chapter_e_check(
         },
     )
 
-def run(loaded_beam: LoadedBeam, **kwargs) -> Any:
+def run(loaded_beam: LoadedMember, **kwargs) -> Any:
     """Dispatch to Chapter F (default), Chapter E, or Chapter H.
 
     - `chapter="f"` (default): returns `AISC9Result`
@@ -985,12 +985,12 @@ def run(loaded_beam: LoadedBeam, **kwargs) -> Any:
         )
     raise ValueError(f"Unknown AISC chapter: {chapter!r}")
 
-def check_chapter_f(loaded_beam: LoadedBeam, l_u: str, f_u: str) -> Dict[str, Any]:
+def check_chapter_f(loaded_beam: LoadedMember, l_u: str, f_u: str) -> Dict[str, Any]:
     return aisc_9_check(loaded_beam, l_u, f_u).info()
 
 
 def check_chapter_e(
-    loaded_beam: LoadedBeam,
+    loaded_beam: LoadedMember,
     l_u: str,
     f_u: str,
     *,
@@ -1009,7 +1009,7 @@ def check_chapter_e(
 
 
 def check_chapter_h(
-    loaded_beam: LoadedBeam,
+    loaded_beam: LoadedMember,
     l_u: str,
     f_u: str,
     *,

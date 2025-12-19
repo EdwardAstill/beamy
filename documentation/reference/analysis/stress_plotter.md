@@ -22,22 +22,22 @@ class StressPlotter:
     """
     Plots stress distributions on the beam's cross-section at a specific location along the beam.
     """
-    def __init__(self, loaded_beam: LoadedBeam):
+    def __init__(self, loaded_beam: LoadedMember):
         """
         Initialize the stress plotter.
         
         Args:
-            loaded_beam: LoadedBeam object containing beam, loads, and analysis results
+            loaded_beam: LoadedMember object containing beam, loads, and analysis results
         """
 ```
 
 ### Initialization
 
 ```python
-from beamy import LoadedBeam, StressPlotter
+from beamy import LoadedMember, StressPlotter
 
-# After creating a LoadedBeam
-lb = LoadedBeam(beam, load_case)
+# After creating a LoadedMember
+lb = LoadedMember(beam, load_case)
 
 # Create a StressPlotter
 sp = StressPlotter(lb)
@@ -110,7 +110,7 @@ def plot_stress_at(
 ### Example
 
 ```python
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedBeam, StressPlotter
+from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, StressPlotter
 from sectiony.library import i_section
 import numpy as np
 
@@ -135,7 +135,7 @@ lc.add_point_force(PointForce(
 ))
 
 # Create loaded beam
-lb = LoadedBeam(beam, lc)
+lb = LoadedMember(beam, lc)
 
 # Find location of maximum von Mises stress
 vm_results = lb.von_mises(points=200)

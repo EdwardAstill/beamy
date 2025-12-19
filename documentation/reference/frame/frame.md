@@ -31,7 +31,7 @@ A **Frame** represents a 3D structural system composed of multiple beam members 
 
 **Relationship to Existing Code:**
 - Reuses `Material` and `Section` from `beamy.setup`
-- Internally converts to `LoadedBeam` objects for analysis
+- Internally converts to `LoadedMember` objects for analysis
 - Leverages existing FEM solvers once member forces/moments are resolved
 
 ---
@@ -575,7 +575,7 @@ loaded_frame.plot_results(
 )
 
 # ============================================
-# 7. CODE CHECKS (via LoadedBeam conversion)
+# 7. CODE CHECKS (via LoadedMember conversion)
 # ============================================
 loaded_beams = loaded_frame.to_loaded_beams()
 for member_id, lb in loaded_beams.items():
@@ -609,11 +609,11 @@ Loads and results can be expressed in either local or global coordinates:
 - **Internal consistency**: All analysis done in global coordinates
 - **Output flexibility**: Results available in both systems
 
-### Conversion to LoadedBeam Objects
+### Conversion to LoadedMember Objects
 
 The `to_loaded_beams()` method enables:
 - Reuse of existing 1D analysis and plotting infrastructure
-- Access to all `LoadedBeam` methods (shear, bending, stress, etc.)
+- Access to all `LoadedMember` methods (shear, bending, stress, etc.)
 - Compatibility with existing code checks (AISC Chapter F)
 - Familiar API for users already using `Beam1D`
 

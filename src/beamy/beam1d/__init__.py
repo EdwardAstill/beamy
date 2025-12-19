@@ -1,5 +1,5 @@
 from .beam import Beam1D
-from .analysis import LoadedBeam
+from .analysis import LoadedMember
 
-__all__ = ["Beam1D", "LoadedBeam"]
+__all__ = ["Beam1D", "LoadedMember"]
 
