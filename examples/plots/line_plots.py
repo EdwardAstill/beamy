@@ -6,6 +6,12 @@ from pathlib import Path
 
 # 1. Setup Beam
 # ---------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Create gallery directory if it doesn't exist
+gallery_dir = PROJECT_ROOT / "gallery" / "plots"
+gallery_dir.mkdir(parents=True, exist_ok=True)
+
 # Create an I-beam section
 section = i_section(d=200, b=100, tf=10, tw=6, r=8)
 
@@ -63,16 +69,11 @@ loads.add_moment(Moment(
 # ---------------------------------------------
 lb = LoadedMember(beam, loads)
 
-# Create gallery directory if it doesn't exist
-gallery_dir = Path("gallery")
-gallery_dir.mkdir(exist_ok=True)
-
 print("Generating analysis plots...")
 plot_analysis_results(
-    lb, 
+    lb,
     save_path=str(gallery_dir / "line_plots_example.svg"),
     show=False,  # Set to True to display interactively
     units={'length': 'mm', 'force': 'N', 'moment': 'N.mm', 'deflection': 'mm'}
 )
 print(f"Plots saved to {gallery_dir / 'line_plots_example.svg'}")
-

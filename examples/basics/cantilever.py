@@ -10,9 +10,11 @@ from pathlib import Path
 from sectiony.library import rhs
 from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, plot_beam_diagram
 
-# Create gallery directory
-gallery_dir = Path("gallery")
-gallery_dir.mkdir(exist_ok=True)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Create gallery directory for this category
+gallery_dir = PROJECT_ROOT / "gallery" / "basics"
+gallery_dir.mkdir(parents=True, exist_ok=True)
 
 # 1. Define Properties
 steel = Material(name="Steel", E=200e9, G=80e9)
@@ -54,4 +56,3 @@ plot_beam_diagram(
 )
 
 print(f"\nPlot saved to: {gallery_dir / 'cantilever.svg'}")
-

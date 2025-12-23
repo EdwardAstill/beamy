@@ -1,6 +1,9 @@
 import numpy as np
+from pathlib import Path
 from sectiony.library import i as i_section
 from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember, DistributedForce, plot_beam_diagram
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Create an I-beam section
 # d=200mm depth, b=100mm width, tf=10mm flange, tw=6mm web, r=8mm fillet
@@ -50,16 +53,14 @@ print(f"Max Von Mises Stress: {max_vm_val/1e6:.2f} MPa at x = {max_vm_x:.2f} mm"
 
 # Plot the beam with forces and stress coloring
 from beamy import StressPlotter
-from pathlib import Path
 
-# Create gallery directory if it doesn't exist
-gallery_dir = Path("gallery")
-gallery_dir.mkdir(exist_ok=True)
+gallery_dir = PROJECT_ROOT / "gallery" / "section"
+gallery_dir.mkdir(parents=True, exist_ok=True)
 
 # Save beam diagram
 plot_beam_diagram(
-    lb, 
-    plot_stress=True, 
+    lb,
+    plot_stress=True,
     plot_section=True,
     save_path=str(gallery_dir / "ibeam_3d_diagram.svg")
 )
@@ -67,8 +68,8 @@ plot_beam_diagram(
 # Plot section stress at the critical location
 sp = StressPlotter(lb)
 sp.plot_stress_at(
-    x_pos=max_vm_x, 
-    stress_type="von_mises", 
+    x_pos=max_vm_x,
+    stress_type="von_mises",
     title=f"Max Von Mises Stress Section (x={max_vm_x:.0f}mm)",
     cmap="plasma",
     show=False
