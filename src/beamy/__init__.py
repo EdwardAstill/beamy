@@ -1,63 +1,35 @@
-from .core.material import Material
-from .core.support import Support, validate_support_type, validate_support_pairs
-from .core.results import Result, AnalysisResult
-from .core.loads import (
-    NodalForce,
-    NodalMoment,
-    NodalSpring,
-    MemberPointForce,
-    MemberPointMoment,
-    MemberDistributedForce,
-    MemberPointSupport,
-    MemberSupport,
-    LoadCase,
-)
-from .beam1d.analysis import LoadedMember
-from .frame.node import Node
-from .frame.member import Member
-from .frame.frame import Frame
-from .frame.analysis import FrameAnalysisSettings, FrameAnalysisResult, StabilizationReport
-from .frame.solver import ElementStiffnessScales
-from .frame.results import MemberResults, MemberActionProfile, MemberDemand
+"""
+beamy - A lightweight 3D linear frame/truss analysis library (MVP).
 
-from .viz import (
-    plot_beam_diagram,
-    plot_analysis_results,
-    StressPlotter,
-    plot_section,
-    plot_supports,
-    plot_loads,
-    plot_frame,
-    plot_deflection,
-    plot_von_mises,
-    plot_member_diagrams
-)
+Only the easy parts are implemented for now:
+- 3D truss/beam-ready data structures
+- Linear solver pipeline (mesh → assembly → solve → recovery for truss)
+- Simple plotting/export stubs
 
-from sectiony import Section, Geometry
+Hard parts intentionally left out for later:
+- AISC design checks
+- Second-order analysis
+- Cable/tension-only elements
+- Full 3D beam formulation
+"""
+
+from beamy.analysis import run_analysis
+from beamy.analysis.settings import AnalysisSettings
+from beamy.loads.loadcase import LoadCase
+from beamy.model.frame import Frame
+from beamy.model.member import Member
+from beamy.model.node import Node
+from beamy.results.frame_result import FrameResult
+from beamy.results.member_result import MemberResult
 
 __all__ = [
-    "Material", "Support", "validate_support_type", "validate_support_pairs",
-    "Result", "AnalysisResult",
-    "NodalForce",
-    "NodalMoment",
-    "NodalSpring",
-    "MemberPointForce",
-    "MemberPointMoment",
-    "MemberDistributedForce",
-    "MemberPointSupport",
-    "MemberSupport",
-    "LoadCase",
-    "LoadedMember",
-    "Node",
-    "Member",
     "Frame",
-    "MemberResults",
-    "MemberDemand",
-    "MemberActionProfile",
-    "FrameAnalysisSettings", "FrameAnalysisResult", "StabilizationReport",
-    "ElementStiffnessScales",
-    "plot_beam_diagram", "plot_analysis_results", "StressPlotter",
-    "plot_section", "plot_supports", "plot_loads",
-    "plot_frame", "plot_deflection", "plot_von_mises", "plot_member_diagrams",
-    "Section", "Geometry"
+    "Member",
+    "Node",
+    "LoadCase",
+    "AnalysisSettings",
+    "FrameResult",
+    "MemberResult",
+    "run_analysis",
 ]
+

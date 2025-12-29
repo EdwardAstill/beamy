@@ -1,1 +1,0 @@
-Provide any enhancements to the api that make this package easier to use.

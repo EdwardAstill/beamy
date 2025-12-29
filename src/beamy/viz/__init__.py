@@ -1,30 +1,11 @@
-from .beam_plots import (
-    plot_beam_diagram,
-    plot_analysis_results,
-    StressPlotter,
-    plot_section,
-    plot_supports,
-    plot_loads
-)
-from .frame_plots import (
-    plot_frame,
-    plot_deflection,
-    plot_von_mises,
-    plot_results,
-    plot_member_diagrams
-)
+"""
+viz - Matplotlib visualization (read-only)
 
-__all__ = [
-    "plot_beam_diagram",
-    "plot_analysis_results",
-    "StressPlotter",
-    "plot_section",
-    "plot_supports",
-    "plot_loads",
-    "plot_frame",
-    "plot_deflection",
-    "plot_von_mises",
-    "plot_results",
-    "plot_member_diagrams"
-]
+Purpose:
+--------
+Export plotting functions for frames and members.
+
+This module provides visualization of structures and results using matplotlib.
+All functions are read-only (no modification of model or results).
+"""
 
