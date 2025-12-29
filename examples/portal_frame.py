@@ -22,10 +22,20 @@ import numpy as np
 from pathlib import Path
 from sectiony.library import i as i_section
 
-# Import frame module
-from beamy import Material
-from beamy.frame import (
-    Node, Member, Frame, FrameLoadCase, LoadedFrame
+# Frame-first API
+from beamy import (
+    LoadCase,
+    Material,
+    MemberDistributedForce,
+    MemberPointForce,
+    NodalForce,
+    Frame,
+    Member,
+    Node,
+    plot_deflection,
+    plot_frame,
+    plot_member_diagrams,
+    plot_von_mises,
 )
 
 # Create gallery subdirectories
@@ -49,29 +59,43 @@ beam_section = i_section(d=0.53, b=0.21, tf=0.016, tw=0.010, r=0.0)    # W530x66
 # Simple 2D portal frame in XZ plane
 # X = horizontal, Z = vertical
 
-nodes = [
-    Node("A", np.array([0.0, 0.0, 0.0]), support="111111"),   # Fixed base left
-    Node("B", np.array([8.0, 0.0, 0.0]), support="111111"),   # Fixed base right
-    Node("C", np.array([0.0, 0.0, 5.0])),                     # Top left (free)
-    Node("D", np.array([8.0, 0.0, 5.0])),                     # Top right (free)
-]
-
 members = [
-    # Left column (vertical from A to C)
+    # Left column (vertical from base to top left)
     # Orientation: local y-axis points in +X direction (strong axis bending for lateral loads)
-    Member("col_left", "A", "C", column_section, steel, np.array([1.0, 0.0, 0.0])),
+    Member("col_left", 
+           start=np.array([0.0, 0.0, 0.0]),
+           end=np.array([0.0, 0.0, 5.0]),
+           section=column_section,
+           material=steel,
+           orientation=np.array([1.0, 0.0, 0.0])),
     
-    # Right column (vertical from B to D)
-    Member("col_right", "B", "D", column_section, steel, np.array([1.0, 0.0, 0.0])),
+    # Right column (vertical from base to top right)
+    Member("col_right",
+           start=np.array([8.0, 0.0, 0.0]),
+           end=np.array([8.0, 0.0, 5.0]),
+           section=column_section,
+           material=steel,
+           orientation=np.array([1.0, 0.0, 0.0])),
     
-    # Beam (horizontal from C to D)
+    # Beam (horizontal from top left to top right)
     # Orientation: local y-axis points in +Y direction
     # This makes local z point in +Z, so loads in local -z go to global -Z (gravity)
-    Member("beam", "C", "D", beam_section, steel, np.array([0.0, 1.0, 0.0])),
+    Member("beam",
+           start=np.array([0.0, 0.0, 5.0]),
+           end=np.array([8.0, 0.0, 5.0]),
+           section=beam_section,
+           material=steel,
+           orientation=np.array([0.0, 1.0, 0.0])),
 ]
 
-# Create frame
-frame = Frame.from_nodes_and_members(nodes, members)
+# Create frame (nodes auto-generated from member endpoints)
+frame = Frame.from_members(members)
+
+# Apply supports to the base nodes (auto-generated as N0 and N1)
+# Find nodes at base (z=0)
+for node in frame.nodes.values():
+    if abs(node.position[2]) < 1e-6:  # z ≈ 0
+        node.support = "111111"  # Fixed base
 
 print("=" * 60)
 print("PORTAL FRAME GEOMETRY")
@@ -84,7 +108,7 @@ for member_id, length in frame.member_lengths.items():
 # ============================================
 # 3. DEFINE LOADS - DEMONSTRATING ALL LOAD TYPES
 # ============================================
-loads = FrameLoadCase("Gravity + Lateral + Point Load")
+loads = LoadCase(name="Gravity + Lateral + Point Load")
 
 # LOAD TYPE 1: Uniform distributed load on beam (member load)
 # This is a gravity load distributed along the entire beam length
@@ -112,9 +136,16 @@ loads.add_member_point_force(
 
 # LOAD TYPE 3: Lateral wind load at top left node (nodal load)
 # Applied in GLOBAL coordinates: +X direction (wind from left)
+# Find top left node (x=0, z=5)
+top_left_node_id = None
+for nid, node in frame.nodes.items():
+    if abs(node.position[0]) < 1e-6 and abs(node.position[2] - 5.0) < 1e-6:
+        top_left_node_id = nid
+        break
+
 wind_load = 30000.0  # 30 kN
-print(f"3. Lateral wind load at node C: {wind_load/1000:.1f} kN (global +X)")
-loads.add_nodal_force("C", np.array([wind_load, 0.0, 0.0]))
+print(f"3. Lateral wind load at node {top_left_node_id}: {wind_load/1000:.1f} kN (global +X)")
+loads.add_nodal_force(top_left_node_id, np.array([wind_load, 0.0, 0.0]))
 
 # ============================================
 # 4. ANALYZE FRAME
@@ -124,7 +155,7 @@ print("PERFORMING FRAME ANALYSIS")
 print("=" * 60)
 print("Using direct stiffness method...")
 
-loaded_frame = LoadedFrame(frame, loads)
+frame.analyze(loads)
 
 print("Analysis complete!")
 
@@ -136,7 +167,7 @@ print("SUPPORT REACTIONS")
 print("=" * 60)
 
 total_reaction = np.zeros(3)
-for node_id, reaction in loaded_frame.reactions.items():
+for node_id, reaction in frame.reactions.items():
     forces = reaction[:3]  # [FX, FY, FZ]
     moments = reaction[3:]  # [MX, MY, MZ]
     total_reaction += forces
@@ -166,24 +197,22 @@ print("=" * 60)
 
 # Beam results
 print("\nBEAM (horizontal member):")
-beam_results = loaded_frame.get_member_results("beam")
-print(f"  Max bending moment (strong axis): {beam_results.bending_z.action.abs_max/1000:.1f} kN·m")
-print(f"  Max shear force: {beam_results.shear_z.action.abs_max/1000:.1f} kN")
-print(f"  Max deflection: {beam_results.shear_z.displacement.abs_max*1000:.2f} mm")
-print(f"  Max Von Mises stress: {beam_results.von_mises.max/1e6:.1f} MPa")
+beam_profile = frame.demand_provider.actions("beam", points=801)
+print(f"  Max bending moment (about local y): {beam_profile.bending_y.abs_max/1000:.1f} kN·m")
+print(f"  Max shear force (local z): {beam_profile.shear_z.abs_max/1000:.1f} kN")
 
 # Column results
 print("\nLEFT COLUMN:")
-col_left = loaded_frame.get_member_results("col_left")
-print(f"  Max axial force: {col_left.axial.action.abs_max/1000:.1f} kN")
-print(f"  Max bending moment: {col_left.bending_z.action.abs_max/1000:.1f} kN·m")
-print(f"  Max Von Mises stress: {col_left.von_mises.max/1e6:.1f} MPa")
+col_left_profile = frame.demand_provider.actions("col_left", points=401)
+print(f"  Max axial force: {col_left_profile.axial.abs_max/1000:.1f} kN")
+print(f"  Max bending moment (about local y): {col_left_profile.bending_y.abs_max/1000:.1f} kN·m")
+print(f"  Max bending moment (about local z): {col_left_profile.bending_z.abs_max/1000:.1f} kN·m")
 
 print("\nRIGHT COLUMN:")
-col_right = loaded_frame.get_member_results("col_right")
-print(f"  Max axial force: {col_right.axial.action.abs_max/1000:.1f} kN")
-print(f"  Max bending moment: {col_right.bending_z.action.abs_max/1000:.1f} kN·m")
-print(f"  Max Von Mises stress: {col_right.von_mises.max/1e6:.1f} MPa")
+col_right_profile = frame.demand_provider.actions("col_right", points=401)
+print(f"  Max axial force: {col_right_profile.axial.abs_max/1000:.1f} kN")
+print(f"  Max bending moment (about local y): {col_right_profile.bending_y.abs_max/1000:.1f} kN·m")
+print(f"  Max bending moment (about local z): {col_right_profile.bending_z.abs_max/1000:.1f} kN·m")
 
 # ============================================
 # 7. VISUALIZE - 3D WIREFRAME PLOTS
@@ -194,7 +223,8 @@ print("=" * 60)
 
 # Basic geometry with loads and reactions
 print("1. Frame geometry with loads and reactions...")
-loaded_frame.plot(
+plot_frame(
+    frame,
     deformed=True,
     scale_factor=50,
     save_path=str(frame_dir / "portal_frame_geometry.svg")
@@ -202,7 +232,8 @@ loaded_frame.plot(
 
 # Deflection plot - colored by displacement magnitude
 print("2. Deflection plot (displacement magnitude)...")
-loaded_frame.plot_deflection(
+plot_deflection(
+    frame,
     scale_factor=50,
     colormap="viridis",
     show_undeformed=True,
@@ -211,7 +242,8 @@ loaded_frame.plot_deflection(
 
 # Von Mises stress plot
 print("3. Von Mises stress distribution...")
-loaded_frame.plot_von_mises(
+plot_von_mises(
+    frame,
     colormap="turbo",
     stress_limits=(0, steel.Fy),  # Cap colorbar at yield stress
     save_path=str(frame_dir / "portal_frame_von_mises.svg")
@@ -219,7 +251,8 @@ loaded_frame.plot_von_mises(
 
 # Member force diagrams
 print("4. Beam internal force diagrams...")
-loaded_frame.plot_member_diagrams(
+plot_member_diagrams(
+    frame,
     "beam",
     save_path=str(frame_dir / "portal_frame_beam_diagrams.svg")
 )

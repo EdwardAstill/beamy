@@ -9,8 +9,14 @@ import numpy as np
 from pathlib import Path
 from sectiony.library import i_section
 from beamy import (
-    Beam1D, Material, Support, LoadCase,
-    PointForce, DistributedForce, Moment, LoadedMember, plot_beam_diagram
+    Material,
+    LoadCase,
+    MemberPointForce,
+    MemberPointMoment,
+    MemberDistributedForce,
+    MemberPointSupport,
+    LoadedMember,
+    plot_beam_diagram,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -23,44 +29,59 @@ gallery_dir.mkdir(parents=True, exist_ok=True)
 steel = Material(name="Steel", E=200e9, G=80e9)
 section = i_section(d=0.3, b=0.15, tf=0.015, tw=0.008, r=0.01)
 
-# 2. Create Beam (6m long, multiple supports)
+# 2. Create member (6m long) + supports (supports along the member belong to geometry)
 L = 6.0
-beam = Beam1D(
-    L=L,
-    material=steel,
-    section=section,
-    supports=[
-        Support(x=0.0, type="111000"),   # Pinned
-        Support(x=3.0, type="011000"),   # Roller
-        Support(x=L, type="111000"),     # Pinned
-    ]
-)
 
 # 3. Apply Multiple Load Types
-loads = LoadCase(name="Multiple Loads")
+load_case = LoadCase(name="Multiple Loads")
 
 # Point force at 1.5m
-loads.add_point_force(PointForce(
-    point=np.array([1.5, 0.0, 0.0]),
-    force=np.array([0.0, 0.0, -8_000.0])  # 8 kN downward
-))
+load_case.member_point_forces.append(
+    MemberPointForce(
+        member_id="M1",
+        position=1.5,
+        force=np.array([0.0, 0.0, -8_000.0]),  # 8 kN downward
+        coords="global",
+        position_type="absolute",
+    )
+)
 
 # Distributed force from 4m to 6m
-loads.add_distributed_force(DistributedForce(
-    start_position=np.array([4.0, 0.0, 0.0]),
-    end_position=np.array([6.0, 0.0, 0.0]),
-    start_force=np.array([0.0, 0.0, -2_000.0]),
-    end_force=np.array([0.0, 0.0, -4_000.0])
-))
+load_case.member_distributed_forces.append(
+    MemberDistributedForce(
+        member_id="M1",
+        start_position=4.0,
+        end_position=6.0,
+        start_force=np.array([0.0, 0.0, -2_000.0]),
+        end_force=np.array([0.0, 0.0, -4_000.0]),
+        coords="global",
+    )
+)
 
 # Moment at 2m
-loads.add_moment(Moment(
-    x=2.0,
-    moment=np.array([0.0, 0.0, 5_000.0])  # 5 kN⋅m
-))
+load_case.member_point_moments.append(
+    MemberPointMoment(
+        member_id="M1",
+        position=2.0,
+        moment=np.array([0.0, 0.0, 5_000.0]),  # 5 kN⋅m about global z
+        coords="global",
+        position_type="absolute",
+    )
+)
 
 # 4. Solve
-lb = LoadedMember(beam, loads)
+lb = LoadedMember(
+    id="M1",
+    start=np.array([0.0, 0.0, 0.0]),
+    end=np.array([L, 0.0, 0.0]),
+    section=section,
+    material=steel,
+    orientation=np.array([0.0, 1.0, 0.0]),  # local z aligns with global z
+    support_start="111000",
+    support_end="111000",
+    point_supports=[MemberPointSupport(position=3.0, support="011000")],
+    load_case=load_case,
+)
 
 # 5. Get Results
 print("Multiple Load Types - Results:")

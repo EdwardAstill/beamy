@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 from .frame import Frame
-from ..core.loads import FrameLoadCase
+from ..core.loads import LoadCase
 from .member import Member
 from .node import Node
 from .solver import (
@@ -20,7 +20,7 @@ from .solver import (
     assemble_internal_nodal_forces,
 )
 from ..core.math import build_transformation_matrix_12x12
-from .results import MemberResultsDirect, MemberDemandProvider
+from .results import MemberResultsDirect, MemberDemandProvider, MemberDemand
 
 
 AnalysisMethod = Literal[
@@ -233,10 +233,10 @@ def _truss_only_rotation_stabilization(
     )
 
 @dataclass
-class LoadedFrame:
-    """A frame with loads applied, ready for analysis."""
+class FrameAnalysis:
+    """A frame analysis under a single load case."""
     frame: Frame
-    loads: FrameLoadCase
+    load_case: LoadCase
 
     settings: FrameAnalysisSettings = field(default_factory=FrameAnalysisSettings)
     
@@ -249,7 +249,7 @@ class LoadedFrame:
 
     # Auto-splitting / bundling metadata
     original_frame: Frame = field(init=False)
-    original_loads: FrameLoadCase = field(init=False)
+    original_load_case: LoadCase = field(init=False)
     _member_bundle: Dict[str, List[str]] = field(init=False, default_factory=dict)  # parent -> ordered segment ids
     _member_segment_parent: Dict[str, str] = field(init=False, default_factory=dict)  # segment -> parent
     _member_segment_offset: Dict[str, float] = field(init=False, default_factory=dict)  # segment -> x0 along parent
@@ -259,15 +259,27 @@ class LoadedFrame:
     def __post_init__(self) -> None:
         # Preserve user-level model for member bundling and conversion.
         self.original_frame = self.frame
-        self.original_loads = self.loads
+        self.original_load_case = self.load_case
 
         # Insert real nodes at member-point attachment points (loads/moments/supports) and
         # split members into solver segments.
-        self.frame, self.loads = self._expand_model_for_attachment_points(self.original_frame, self.original_loads)
+        self.frame, self.load_case = self._expand_model_for_attachment_points(
+            self.original_frame, self.original_load_case
+        )
 
         self._validate_loads()
         self._adjust_full_length_loads()
         self._analyze_frame()
+
+    def analyze(self) -> FrameAnalysisResult:
+        """Return the analysis result (analysis is performed during initialization)."""
+        if self.analysis_result is None:
+            raise RuntimeError("Frame analysis did not run")
+        return self.analysis_result
+
+    def member_demand(self, member_id: str) -> MemberDemand:
+        """Return a demand accessor for a member under this analysis' load case."""
+        return MemberDemand(member_id=member_id, _provider=self.demand_provider)
 
     @staticmethod
     def _merge_support(a: Optional[str], b: Optional[str]) -> Optional[str]:
@@ -297,7 +309,7 @@ class LoadedFrame:
             return self.original_frame.get_member(member_id)
     
     def _validate_loads(self) -> None:
-        for nf in self.loads.nodal_forces:
+        for nf in self.load_case.nodal_forces:
             if nf.node_id not in self.frame.nodes:
                 raise ValueError(f"Unknown node '{nf.node_id}'")
             if getattr(nf, "coords", "global") == "local":
@@ -307,7 +319,7 @@ class LoadedFrame:
                     _ = self._get_reference_member(nf.reference_member_id)
                 except KeyError:
                     raise ValueError(f"Unknown reference member '{nf.reference_member_id}' for nodal force at '{nf.node_id}'")
-        for nm in self.loads.nodal_moments:
+        for nm in self.load_case.nodal_moments:
             if nm.node_id not in self.frame.nodes:
                 raise ValueError(f"Unknown node '{nm.node_id}'")
             if getattr(nm, "coords", "global") == "local":
@@ -318,17 +330,17 @@ class LoadedFrame:
                 except KeyError:
                     raise ValueError(f"Unknown reference member '{nm.reference_member_id}' for nodal moment at '{nm.node_id}'")
         mids = [m.id for m in self.frame.members]
-        for mpf in self.loads.member_point_forces:
+        for mpf in self.load_case.member_point_forces:
             if mpf.member_id not in mids:
                 raise ValueError(f"Unknown member '{mpf.member_id}'")
-        for mpm in getattr(self.loads, "member_point_moments", []):
+        for mpm in getattr(self.load_case, "member_point_moments", []):
             if mpm.member_id not in mids:
                 raise ValueError(f"Unknown member '{mpm.member_id}'")
-        for mdf in self.loads.member_distributed_forces:
+        for mdf in self.load_case.member_distributed_forces:
             if mdf.member_id not in mids:
                 raise ValueError(f"Unknown member '{mdf.member_id}'")
 
-        for ns in getattr(self.loads, "nodal_springs", []):
+        for ns in getattr(self.load_case, "nodal_springs", []):
             if ns.node_id not in self.frame.nodes:
                 raise ValueError(f"Unknown node '{ns.node_id}'")
             if getattr(ns, "coords", "global") == "local":
@@ -341,12 +353,11 @@ class LoadedFrame:
                         f"Unknown reference member '{ns.reference_member_id}' for nodal spring at '{ns.node_id}'"
                     )
 
-    def _expand_model_for_attachment_points(self, frame: Frame, loads: FrameLoadCase) -> tuple[Frame, FrameLoadCase]:
+    def _expand_model_for_attachment_points(self, frame: Frame, loads: LoadCase) -> tuple[Frame, LoadCase]:
         """Insert real nodes at member-point attachment locations and split members.
 
-        - Creates nodes at: point forces, point moments, point supports, distributed-load endpoints.
+        - Creates nodes at: point forces, point moments, member point supports, distributed-load endpoints.
         - Splits each original member into segment members for the solver.
-        - Applies member-wide supports to every node on that member after splitting.
         - Rewrites loads: point forces/moments become nodal loads; distributed loads are split per segment.
 
         Returns:
@@ -373,6 +384,7 @@ class LoadedFrame:
             x = mpm.position * m.length if mpm.position_type == "relative" else mpm.position
             add_pos(m.id, x)
 
+        # Member point supports from LoadCase
         for mps in getattr(loads, "member_point_supports", []):
             m = frame.get_member(mps.member_id)
             x = mps.position * m.length if mps.position_type == "relative" else mps.position
@@ -381,7 +393,7 @@ class LoadedFrame:
         for mdf in loads.member_distributed_forces:
             m = frame.get_member(mdf.member_id)
             s = float(mdf.start_position)
-            e = float(m.length if mdf.end_position == -1.0 else mdf.end_position)
+            e = float(m.length if mdf.end_position is None else mdf.end_position)
             add_pos(m.id, s)
             add_pos(m.id, e)
 
@@ -403,14 +415,55 @@ class LoadedFrame:
                 if float(np.linalg.norm(perp)) <= tol:
                     add_pos(m.id, min(max(x, 0.0), L))
 
-        needs_split = any(len(v) > 2 for v in split_pos.values()) or bool(getattr(loads, "member_supports", [])) or bool(getattr(loads, "member_point_supports", []))
+        needs_split = any(len(v) > 2 for v in split_pos.values())
         if not needs_split:
-            # Trivial mapping for conversion.
-            self._member_bundle = {m.id: [m.id] for m in frame.members}
-            self._member_segment_parent = {m.id: m.id for m in frame.members}
-            self._member_segment_offset = {m.id: 0.0 for m in frame.members}
-            self._member_nodes_along = {m.id: [(0.0, m.start_node_id), (m.length, m.end_node_id)] for m in frame.members}
-            return frame, loads
+            # Trivial mapping for conversion (no splitting required).
+            #
+            # We still need to apply *member end* point supports (x=0 or x=L) to the
+            # existing end nodes, because those supports belong to member geometry.
+            nodes_by_id: Dict[str, Node] = {
+                nid: Node(id=nid, position=n.position.copy(), support=n.support) for nid, n in frame.nodes.items()
+            }
+
+            changed = False
+            tol = 1e-9
+            for mps in getattr(loads, "member_point_supports", []):
+                member = frame.get_member(mps.member_id)
+                Lm = float(member.length)
+                x = float(mps.position) * Lm if mps.position_type == "relative" else float(mps.position)
+                if abs(x) <= tol:
+                    nid = member.start_node_id
+                elif abs(x - Lm) <= tol:
+                    nid = member.end_node_id
+                else:
+                    # Interior point supports require splitting and should have
+                    # triggered needs_split via split_pos.
+                    continue
+                nodes_by_id[nid].support = self._merge_support(nodes_by_id[nid].support, mps.support)
+                changed = True
+            
+            # Apply member supports (all nodes along member)
+            for ms in getattr(loads, "member_supports", []):
+                member = frame.get_member(ms.member_id)
+                nodes_by_id[member.start_node_id].support = self._merge_support(
+                    nodes_by_id[member.start_node_id].support, ms.support
+                )
+                nodes_by_id[member.end_node_id].support = self._merge_support(
+                    nodes_by_id[member.end_node_id].support, ms.support
+                )
+                changed = True
+
+            out_frame = frame
+            if changed:
+                out_frame = Frame.from_nodes_and_members(list(nodes_by_id.values()), list(frame.members))
+
+            self._member_bundle = {m.id: [m.id] for m in out_frame.members}
+            self._member_segment_parent = {m.id: m.id for m in out_frame.members}
+            self._member_segment_offset = {m.id: 0.0 for m in out_frame.members}
+            self._member_nodes_along = {
+                m.id: [(0.0, m.start_node_id), (m.length, m.end_node_id)] for m in out_frame.members
+            }
+            return out_frame, loads
 
         # Node pool: start with existing nodes (preserve IDs)
         nodes_by_id: Dict[str, Node] = {}
@@ -499,8 +552,8 @@ class LoadedFrame:
                 new_members.append(
                     Member(
                         id=seg_id,
-                        start_node_id=n0,
-                        end_node_id=n1,
+                        start=nodes_by_id[n0].position.copy(),
+                        end=nodes_by_id[n1].position.copy(),
                         section=parent.section,
                         material=parent.material,
                         orientation=parent.orientation.copy(),
@@ -521,27 +574,27 @@ class LoadedFrame:
 
             self._member_bundle[parent.id] = seg_ids
 
-        # Apply member-point supports
+        # Apply member point supports from LoadCase
         for mps in getattr(loads, "member_point_supports", []):
             parent = frame.get_member(mps.member_id)
             x = mps.position * parent.length if mps.position_type == "relative" else mps.position
             chain = self._member_nodes_along[parent.id]
             nearest_x, nid = min(chain, key=lambda t: abs(t[0] - x))
             if abs(nearest_x - x) > 1e-6:
-                raise ValueError(f"MemberPointSupport on {parent.id} at x={x} did not land on a split node")
+                raise ValueError(f"MemberPointSupport on {mps.member_id} at x={x} did not land on a split node")
             nodes_by_id[nid].support = self._merge_support(nodes_by_id[nid].support, mps.support)
-
-        # Apply member-wide supports to all nodes on that member
+        
+        # Apply member supports from LoadCase (apply to all nodes along member)
         for ms in getattr(loads, "member_supports", []):
-            if ms.member_id not in self._member_nodes_along:
-                raise ValueError(f"Unknown member '{ms.member_id}' for member support")
-            for _x, nid in self._member_nodes_along[ms.member_id]:
+            parent = frame.get_member(ms.member_id)
+            chain = self._member_nodes_along[parent.id]
+            for _, nid in chain:
                 nodes_by_id[nid].support = self._merge_support(nodes_by_id[nid].support, ms.support)
 
         expanded_frame = Frame.from_nodes_and_members(list(nodes_by_id.values()), new_members)
 
         # Rewrite loads
-        expanded_loads = FrameLoadCase(name=loads.name)
+        expanded_loads = LoadCase(name=loads.name)
         expanded_loads.nodal_forces = list(loads.nodal_forces)
         expanded_loads.nodal_moments = list(loads.nodal_moments)
         expanded_loads.nodal_springs = list(getattr(loads, "nodal_springs", []))
@@ -572,7 +625,7 @@ class LoadedFrame:
             parent = frame.get_member(mdf.member_id)
             L = parent.length
             s = float(mdf.start_position)
-            e = float(L if mdf.end_position == -1.0 else mdf.end_position)
+            e = float(L if mdf.end_position is None else mdf.end_position)
             if e < s:
                 continue
 
@@ -602,8 +655,8 @@ class LoadedFrame:
         return expanded_frame, expanded_loads
     
     def _adjust_full_length_loads(self) -> None:
-        for mdf in self.loads.member_distributed_forces:
-            if mdf.end_position == -1.0:
+        for mdf in self.load_case.member_distributed_forces:
+            if mdf.end_position is None:
                 mdf.end_position = self.frame.get_member(mdf.member_id).length
     
     def _analyze_frame(self) -> None:
@@ -612,7 +665,7 @@ class LoadedFrame:
 
         # Nodal springs (convert to global 6x6 stiffness blocks).
         nodal_spring_stiffnesses: List[Tuple[str, np.ndarray]] = []
-        for ns in getattr(self.loads, "nodal_springs", []):
+        for ns in getattr(self.load_case, "nodal_springs", []):
             if getattr(ns, "coords", "global") == "local":
                 ref = self._get_reference_member(ns.reference_member_id)
                 R = ref.transformation_matrix
@@ -862,7 +915,7 @@ class LoadedFrame:
 
         design_grade_ok = bool(converged) and (not stabilization.used)
 
-        demand_provider = MemberDemandProvider(self.frame, self.loads, self._member_end_forces, self._member_bundle)
+        demand_provider = MemberDemandProvider(self.frame, self.load_case, self._member_end_forces, self._member_bundle)
 
         self.analysis_result = FrameAnalysisResult(
             nodal_displacements=dict(self._nodal_displacements),
@@ -930,7 +983,7 @@ class LoadedFrame:
         P: Dict[str, float] = {nid: 0.0 for nid in self.frame.nodes.keys()}
 
         # 1) Direct nodal forces
-        for nf in self.loads.nodal_forces:
+        for nf in self.load_case.nodal_forces:
             f_g = nf.force
             if getattr(nf, "coords", "global") == "local":
                 m_ref = self._get_reference_member(getattr(nf, "reference_member_id", None))
@@ -938,7 +991,7 @@ class LoadedFrame:
             P[nf.node_id] += _downward_p_from_global_force(f_g)
 
         # 2) Member point forces (distributed to end nodes like the solver load vector)
-        for mpf in self.loads.member_point_forces:
+        for mpf in self.load_case.member_point_forces:
             m = self.frame.get_member(mpf.member_id)
             x = mpf.position * m.length if mpf.position_type == "relative" else mpf.position
             f_g = m.transformation_matrix.T @ mpf.force if mpf.coords == "local" else mpf.force
@@ -950,7 +1003,7 @@ class LoadedFrame:
             P[m.end_node_id] += N2 * p_here
 
         # 3) Member distributed forces (lump total vertical to end nodes)
-        for mdf in self.loads.member_distributed_forces:
+        for mdf in self.load_case.member_distributed_forces:
             m = self.frame.get_member(mdf.member_id)
 
             # Convert to global if needed
@@ -978,24 +1031,24 @@ class LoadedFrame:
         F = np.zeros(n_dofs)
         # Track fixed-end forces per member in local axes (start DOFs first).
         self._member_fixed_end_forces_local = {m.id: np.zeros(12) for m in self.frame.members}
-        for nf in self.loads.nodal_forces:
+        for nf in self.load_case.nodal_forces:
             f_g = nf.force
             if getattr(nf, "coords", "global") == "local":
                 m_ref = self._get_reference_member(nf.reference_member_id)
                 f_g = m_ref.transformation_matrix.T @ nf.force
             F[node_to_idx[nf.node_id]*6 : node_to_idx[nf.node_id]*6+3] += f_g
 
-        for nm in self.loads.nodal_moments:
+        for nm in self.load_case.nodal_moments:
             m_g = nm.moment
             if getattr(nm, "coords", "global") == "local":
                 m_ref = self._get_reference_member(nm.reference_member_id)
                 m_g = m_ref.transformation_matrix.T @ nm.moment
             F[node_to_idx[nm.node_id]*6+3 : node_to_idx[nm.node_id]*6+6] += m_g
-        for mpf in self.loads.member_point_forces:
+        for mpf in self.load_case.member_point_forces:
             self._add_member_point_force_to_vector(mpf, node_to_idx, F, self._member_fixed_end_forces_local)
-        for mpm in getattr(self.loads, "member_point_moments", []):
+        for mpm in getattr(self.load_case, "member_point_moments", []):
             self._add_member_point_moment_to_vector(mpm, node_to_idx, F, self._member_fixed_end_forces_local)
-        for mdf in self.loads.member_distributed_forces:
+        for mdf in self.load_case.member_distributed_forces:
             self._add_member_distributed_force_to_vector(mdf, node_to_idx, F, self._member_fixed_end_forces_local)
         return F
 
@@ -1135,7 +1188,7 @@ class LoadedFrame:
         
         # Collect distributed member loads in local coordinates
         member_loads = []
-        for mdf in self.loads.member_distributed_forces:
+        for mdf in self.load_case.member_distributed_forces:
             if mdf.member_id == member_id:
                 # Convert to local coords if needed
                 if mdf.coords == "global":
@@ -1274,3 +1327,46 @@ class LoadedFrame:
     def plot_aisc_utilization(self, **kwargs):
         from ..viz.frame_plots import plot_aisc_utilization
         plot_aisc_utilization(self, **kwargs)
+
+
+@dataclass(frozen=True)
+class _FrameSolveState:
+    """Internal solve state returned by the solver pipeline.
+
+    This exists so the public API can be `Frame.analyze(load_case)` while the solver
+    keeps auto-splitting/rewriting details internal.
+    """
+
+    original_frame: Frame
+    original_load_case: LoadCase
+
+    expanded_frame: Frame
+    expanded_load_case: LoadCase
+
+    member_bundle: Dict[str, List[str]]
+    member_segment_parent: Dict[str, str]
+    member_segment_offset: Dict[str, float]
+    member_nodes_along: Dict[str, List[Tuple[float, str]]]
+
+    result: FrameAnalysisResult
+
+
+def _solve_frame_internal(
+    frame: Frame, load_case: LoadCase, settings: Optional[FrameAnalysisSettings] = None
+) -> _FrameSolveState:
+    """Solve a frame under a load case and return internal metadata + result."""
+    use_settings = settings if settings is not None else FrameAnalysisSettings()
+    analysis = FrameAnalysis(frame=frame, load_case=load_case, settings=use_settings)
+    result = analysis.analyze()
+
+    return _FrameSolveState(
+        original_frame=analysis.original_frame,
+        original_load_case=analysis.original_load_case,
+        expanded_frame=analysis.frame,
+        expanded_load_case=analysis.load_case,
+        member_bundle=dict(analysis._member_bundle),
+        member_segment_parent=dict(analysis._member_segment_parent),
+        member_segment_offset=dict(analysis._member_segment_offset),
+        member_nodes_along=dict(analysis._member_nodes_along),
+        result=result,
+    )

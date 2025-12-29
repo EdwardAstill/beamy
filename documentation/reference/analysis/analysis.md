@@ -1,5 +1,7 @@
 # Analysis
 
+> **ARCHIVED (pre-vNext)**: This page documents legacy analysis helpers (`LoadedFrame`, 1D reaction solvers, etc.) and may not match the current Beamy API. Current usage is `frame.analyze(load_case)` and querying demand via `frame.member_demand(...)`. See `documentation/user guide/api.md`.
+
 Reference documentation for beam analysis functions and result classes.
 
 ## Table of Contents

@@ -2,18 +2,23 @@ from .core.material import Material
 from .core.support import Support, validate_support_type, validate_support_pairs
 from .core.results import Result, AnalysisResult
 from .core.loads import (
-    PointForce, Moment, DistributedForce,
-    NodalForce, NodalMoment, MemberPointForce, MemberDistributedForce,
-    LoadCase, FrameLoadCase, NodalSpring
+    NodalForce,
+    NodalMoment,
+    NodalSpring,
+    MemberPointForce,
+    MemberPointMoment,
+    MemberDistributedForce,
+    MemberPointSupport,
+    MemberSupport,
+    LoadCase,
 )
-from .beam1d.beam import Beam1D
 from .beam1d.analysis import LoadedMember
 from .frame.node import Node
 from .frame.member import Member
 from .frame.frame import Frame
-from .frame.analysis import LoadedFrame, FrameAnalysisSettings, FrameAnalysisResult, StabilizationReport
+from .frame.analysis import FrameAnalysisSettings, FrameAnalysisResult, StabilizationReport
 from .frame.solver import ElementStiffnessScales
-from .frame.results import MemberResults
+from .frame.results import MemberResults, MemberActionProfile, MemberDemand
 
 from .viz import (
     plot_beam_diagram,
@@ -33,11 +38,22 @@ from sectiony import Section, Geometry
 __all__ = [
     "Material", "Support", "validate_support_type", "validate_support_pairs",
     "Result", "AnalysisResult",
-    "PointForce", "Moment", "DistributedForce",
-    "NodalForce", "NodalMoment", "MemberPointForce", "MemberDistributedForce",
-    "LoadCase", "FrameLoadCase", "NodalSpring",
-    "Beam1D", "LoadedMember",
-    "Node", "Member", "Frame", "LoadedFrame", "MemberResults",
+    "NodalForce",
+    "NodalMoment",
+    "NodalSpring",
+    "MemberPointForce",
+    "MemberPointMoment",
+    "MemberDistributedForce",
+    "MemberPointSupport",
+    "MemberSupport",
+    "LoadCase",
+    "LoadedMember",
+    "Node",
+    "Member",
+    "Frame",
+    "MemberResults",
+    "MemberDemand",
+    "MemberActionProfile",
     "FrameAnalysisSettings", "FrameAnalysisResult", "StabilizationReport",
     "ElementStiffnessScales",
     "plot_beam_diagram", "plot_analysis_results", "StressPlotter",

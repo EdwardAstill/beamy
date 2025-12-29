@@ -1,79 +1,115 @@
-import numpy as np
-from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember, DistributedForce
-from beamy.analysis import plot_analysis_results
+from __future__ import annotations
+
 from pathlib import Path
 
-# 1. Setup Beam
-# ---------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+import numpy as np
+from sectiony.library import i as i_section
 
-# Create gallery directory if it doesn't exist
-gallery_dir = PROJECT_ROOT / "gallery" / "plots"
-gallery_dir.mkdir(parents=True, exist_ok=True)
-
-# Create an I-beam section
-section = i_section(d=200, b=100, tf=10, tw=6, r=8)
-
-# Define material (steel)
-steel = Material(name="Steel", E=210e9, G=80e9)
-
-# Define supports
-# Pinned at start (x=0), Roller at end (x=3000)
-# Note: Internal nodes are automatically inserted at load positions for accurate deflection
-supports = [
-    Support(x=0, type="111100"),      # Pinned (Fixed: Ux, Uy, Uz, Rx)
-    Support(x=3000, type="011100"),   # Roller (Fixed: Uy, Uz, Rx)
-]
-
-# Create the beam (3m long)
-beam = Beam1D(L=3000, material=steel, section=section, supports=supports)
-
-# 2. Setup Loads
-# ---------------------------------------------
-loads = LoadCase(name="Complex Loading")
-
-# Vertical Point Force (Fy - Bending about Z)
-loads.add_point_force(PointForce(
-    point=np.array([1000, 0, 0]),   # At x=1m
-    force=np.array([0, -5000, 0])   # 5kN downward
-))
-
-# Horizontal Point Force (Fz - Bending about Y)
-loads.add_point_force(PointForce(
-    point=np.array([2000, 0, 0]),   # At x=2m
-    force=np.array([0, 0, 2000])    # 2kN sideways
-))
-
-# Distributed Force (Vertical)
-loads.add_distributed_force(DistributedForce(
-    start_position=np.array([1500, 0, 0]),
-    end_position=np.array([2500, 0, 0]),
-    start_force=np.array([0, -2000, 0]), # -2 kN/m
-    end_force=np.array([0, -2000, 0])    # -2 kN/m
-))
-
-# Axial Force (Compression)
-loads.add_point_force(PointForce(
-    point=np.array([3000, 0, 0]),   # At end
-    force=np.array([-10000, 0, 0])  # 10kN axial compression
-))
-
-# Torsion
-loads.add_moment(Moment(
-    x=1500,
-    moment=np.array([500, 0, 0])    # 500 Nm Torsion
-))
-
-# 3. Analyze and Plot
-# ---------------------------------------------
-lb = LoadedMember(beam, loads)
-
-print("Generating analysis plots...")
-plot_analysis_results(
-    lb,
-    save_path=str(gallery_dir / "line_plots_example.svg"),
-    show=False,  # Set to True to display interactively
-    units={'length': 'mm', 'force': 'N', 'moment': 'N.mm', 'deflection': 'mm'}
+from beamy import (
+    LoadCase,
+    LoadedMember,
+    Material,
+    MemberDistributedForce,
+    MemberPointForce,
+    MemberPointMoment,
+    plot_analysis_results,
 )
-print(f"Plots saved to {gallery_dir / 'line_plots_example.svg'}")
+
+
+def main() -> None:
+    # 1. Setup member (units: mm, N)
+    project_root = Path(__file__).resolve().parents[2]
+    gallery_dir = project_root / "gallery" / "plots"
+    gallery_dir.mkdir(parents=True, exist_ok=True)
+
+    section = i_section(d=200, b=100, tf=10, tw=6, r=8)
+    steel = Material(name="Steel", E=210e9, G=80e9)
+
+    L = 3000.0  # mm
+
+    # 2. Setup loads
+    load_case = LoadCase(name="Complex Loading")
+
+    # Vertical point force at x=1000 mm (global +Y is "up" here; use negative for down)
+    load_case.member_point_forces.append(
+        MemberPointForce(
+            member_id="M1",
+            position=1000.0,
+            force=np.array([0.0, -5000.0, 0.0]),
+            coords="global",
+            position_type="absolute",
+        )
+    )
+
+    # Horizontal point force at x=2000 mm (global +Z)
+    load_case.member_point_forces.append(
+        MemberPointForce(
+            member_id="M1",
+            position=2000.0,
+            force=np.array([0.0, 0.0, 2000.0]),
+            coords="global",
+            position_type="absolute",
+        )
+    )
+
+    # Distributed force from x=1500 to 2500 mm (global -Y)
+    load_case.member_distributed_forces.append(
+        MemberDistributedForce(
+            member_id="M1",
+            start_position=1500.0,
+            end_position=2500.0,
+            start_force=np.array([0.0, -2000.0, 0.0]),
+            end_force=np.array([0.0, -2000.0, 0.0]),
+            coords="global",
+        )
+    )
+
+    # Axial force at x=L (compression in global -X)
+    load_case.member_point_forces.append(
+        MemberPointForce(
+            member_id="M1",
+            position=L,
+            force=np.array([-10000.0, 0.0, 0.0]),
+            coords="global",
+            position_type="absolute",
+        )
+    )
+
+    # Torsion about global X at x=1500 mm
+    load_case.member_point_moments.append(
+        MemberPointMoment(
+            member_id="M1",
+            position=1500.0,
+            moment=np.array([500.0, 0.0, 0.0]),
+            coords="global",
+            position_type="absolute",
+        )
+    )
+
+    # 3. Analyze (supports: pinned-like at start, roller-like at end)
+    lm = LoadedMember(
+        id="M1",
+        start=np.array([0.0, 0.0, 0.0]),
+        end=np.array([L, 0.0, 0.0]),
+        section=section,
+        material=steel,
+        orientation=np.array([0.0, 0.0, 1.0]),
+        support_start="111100",
+        support_end="011100",
+        load_case=load_case,
+    )
+
+    # 4. Plot results (saved as .svg)
+    out_path = gallery_dir / "line_plots_example.svg"
+    plot_analysis_results(
+        lm,
+        save_path=str(out_path),
+        show=False,
+        points=201,
+        units={"length": "mm", "force": "N", "moment": "N·mm", "deflection": "mm"},
+    )
+    print(f"Plots saved to {out_path}")
+
+
+if __name__ == "__main__":
+    main()

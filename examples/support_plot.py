@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 from beamy import Support
-from beamy.setup import plot_supports
+from beamy import plot_supports
 
 # Create gallery directory
 gallery_dir = Path("gallery")

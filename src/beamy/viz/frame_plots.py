@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Tuple, TYPE_CHECKING
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
@@ -7,8 +8,16 @@ from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 
 if TYPE_CHECKING:
-    from ..frame.analysis import LoadedFrame
+    from ..core.loads import LoadCase
+    from ..frame.frame import Frame
     from ..frame.member import Member
+
+
+def _normalize_svg_path(save_path: str) -> str:
+    root, ext = os.path.splitext(save_path)
+    if ext.lower() != ".svg":
+        return f"{root}.svg"
+    return save_path
 
 
 def _beam_shape_functions(xi: float, L: float) -> tuple[float, float, float, float]:
@@ -28,7 +37,8 @@ def _beam_shape_functions(xi: float, L: float) -> tuple[float, float, float, flo
 
 
 def _member_deformed_points(
-    loaded_frame: LoadedFrame,
+    analysis_frame: "Frame",
+    nodal_displacements: dict[str, np.ndarray],
     member: "Member",
     points_per_member: int,
     scale_factor: float,
@@ -41,7 +51,7 @@ def _member_deformed_points(
       - pts_global: (n,3) array of deformed global points
       - disp_mags:  (n,) array of displacement magnitudes at each point (global)
     """
-    node_pos = loaded_frame.frame.node_positions
+    node_pos = analysis_frame.node_positions
     s = node_pos[member.start_node_id]
     e = node_pos[member.end_node_id]
     L = float(np.linalg.norm(e - s))
@@ -51,8 +61,8 @@ def _member_deformed_points(
         return pts, mags
 
     # Global nodal DOFs: [UX, UY, UZ, RX, RY, RZ]
-    d_s_g = loaded_frame.nodal_displacements[member.start_node_id]
-    d_e_g = loaded_frame.nodal_displacements[member.end_node_id]
+    d_s_g = nodal_displacements[member.start_node_id]
+    d_e_g = nodal_displacements[member.end_node_id]
 
     # Truss/cable plotting:
     # These elements should NOT inherit beam end-rotations in the visualization.
@@ -140,7 +150,9 @@ def _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=8)
     return side_faces, [base_pts]
 
 def plot_frame(
-    loaded_frame: LoadedFrame,
+    frame: "Frame",
+    load_case: Optional["LoadCase"] = None,
+    *,
     show_loads: bool = True,
     show_moments: bool = True,
     show_member_ids: bool = False,
@@ -153,10 +165,27 @@ def plot_frame(
     """Simplified frame geometry plot with constraint labels, force arrows, and moment vectors."""
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
-    node_pos = loaded_frame.frame.node_positions
+
+    if save_path is not None:
+        save_path = _normalize_svg_path(save_path)
+
+    node_pos = frame.node_positions
+
+    # If the frame has been analyzed, use the solver-expanded model for deformed plots and
+    # for showing rewritten nodal loads (member point loads become nodal loads on inserted nodes).
+    solve_state = getattr(frame, "_solve_state", None)
+    analysis_frame = solve_state.expanded_frame if solve_state is not None else None
+    nodal_displacements = frame.analysis_result.nodal_displacements if solve_state is not None else None
+
+    plot_load_case = load_case
+    if plot_load_case is None and solve_state is not None:
+        plot_load_case = solve_state.expanded_load_case
+
+    # For loads on inserted nodes, we need positions from the expanded frame.
+    pos_by_node_id = analysis_frame.node_positions if analysis_frame is not None else node_pos
     
     # Plot members (red if member constraints are present, black otherwise)
-    for member in loaded_frame.frame.members:
+    for member in frame.members:
         s, e = node_pos[member.start_node_id], node_pos[member.end_node_id]
         is_constrained = bool(member.constraints) and ("1" in member.constraints)
         color = 'red' if is_constrained else 'black'
@@ -164,9 +193,12 @@ def plot_frame(
     
     # Plot deformed shape if requested (use smooth shape functions)
     if deformed:
-        for member in loaded_frame.frame.members:
+        if analysis_frame is None or nodal_displacements is None:
+            raise RuntimeError("Frame must be analyzed before plotting the deformed shape.")
+        for member in analysis_frame.members:
             pts, _mags = _member_deformed_points(
-                loaded_frame=loaded_frame,
+                analysis_frame=analysis_frame,
+                nodal_displacements=nodal_displacements,
                 member=member,
                 points_per_member=25,
                 scale_factor=scale_factor,
@@ -175,7 +207,7 @@ def plot_frame(
     
     # Plot nodes and constraints
     for nid, pos in node_pos.items():
-        node = loaded_frame.frame.nodes[nid]
+        node = frame.nodes[nid]
         if node.support:
             # Constrained node: red dot with constraint label (inline)
             ax.scatter([pos[0]], [pos[1]], [pos[2]], c='red', marker='o', s=80, zorder=10)
@@ -193,13 +225,16 @@ def plot_frame(
     
     # Plot member IDs at midpoints
     if show_member_ids:
-        for m in loaded_frame.frame.members:
+        for m in frame.members:
             mid = (node_pos[m.start_node_id] + node_pos[m.end_node_id]) / 2
             ax.text(mid[0], mid[1], mid[2], m.id, fontsize=8, color='blue', style='italic', alpha=0.7)
     
     # Plot applied forces with arrow cones (like 1D beam analysis)
-    if show_loads:
-        all_forces = [(node_pos[nf.node_id], nf.force) for nf in loaded_frame.loads.nodal_forces]
+    if show_loads and plot_load_case is not None:
+        all_forces = []
+        for nf in plot_load_case.nodal_forces:
+            if nf.node_id in pos_by_node_id:
+                all_forces.append((pos_by_node_id[nf.node_id], nf.force))
         if all_forces:
             max_force = max([np.linalg.norm(f) for _, f in all_forces])
             if max_force > 1e-10:
@@ -234,7 +269,10 @@ def plot_frame(
 
         # Plot applied nodal moments as curved arc arrows (like 1D beam plots)
         if show_moments:
-            all_moments = [(node_pos[nm.node_id], nm.moment) for nm in loaded_frame.loads.nodal_moments]
+            all_moments = []
+            for nm in plot_load_case.nodal_moments:
+                if nm.node_id in pos_by_node_id:
+                    all_moments.append((pos_by_node_id[nm.node_id], nm.moment))
             if all_moments:
                 max_moment = max([np.linalg.norm(m) for _, m in all_moments])
                 if max_moment > 1e-12:
@@ -304,38 +342,59 @@ def plot_frame(
         plt.show()
 
 def plot_deflection(
-    loaded_frame: LoadedFrame, scale_factor: float = 1.0, points_per_member: int = 20,
-    colormap: str = "viridis", show_undeformed: bool = True, show_colorbar: bool = True, save_path: Optional[str] = None
+    frame: "Frame",
+    *,
+    scale_factor: float = 1.0,
+    points_per_member: int = 20,
+    colormap: str = "viridis",
+    show_undeformed: bool = True,
+    show_colorbar: bool = True,
+    save_path: Optional[str] = None,
 ) -> None:
     """Plot deformed frame colored by displacement magnitude."""
+    if save_path is not None:
+        save_path = _normalize_svg_path(save_path)
+
+    solve_state = getattr(frame, "_solve_state", None)
+    if solve_state is None:
+        raise RuntimeError("Frame must be analyzed before plotting deflection.")
+
+    analysis_frame = solve_state.expanded_frame
+    node_pos = analysis_frame.node_positions
+    nodal_displacements = frame.analysis_result.nodal_displacements
+
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
-    node_pos = loaded_frame.frame.node_positions
     
     # Collect displacement magnitudes for color mapping (use smooth interpolation)
     all_disps: list[float] = []
-    for m in loaded_frame.frame.members:
+    for m in analysis_frame.members:
         _pts, mags = _member_deformed_points(
-            loaded_frame=loaded_frame,
+            analysis_frame=analysis_frame,
+            nodal_displacements=nodal_displacements,
             member=m,
             points_per_member=points_per_member,
             scale_factor=1.0,  # magnitudes should be unscaled physical displacements
         )
         all_disps.extend([float(x) for x in mags])
+
+    if not all_disps:
+        return
     
     norm = Normalize(vmin=min(all_disps), vmax=max(all_disps))
     cmap = plt.get_cmap(colormap)
     
     # Plot undeformed frame
     if show_undeformed:
-        for m in loaded_frame.frame.members:
+        for m in analysis_frame.members:
             s, e = node_pos[m.start_node_id], node_pos[m.end_node_id]
             ax.plot([s[0], e[0]], [s[1], e[1]], [s[2], e[2]], 'k--', lw=1, alpha=0.3)
     
     # Plot deformed frame with color mapping (smooth member curves)
-    for m in loaded_frame.frame.members:
+    for m in analysis_frame.members:
         pts, mags = _member_deformed_points(
-            loaded_frame=loaded_frame,
+            analysis_frame=analysis_frame,
+            nodal_displacements=nodal_displacements,
             member=m,
             points_per_member=points_per_member,
             scale_factor=scale_factor,
@@ -368,31 +427,43 @@ def plot_deflection(
         plt.show()
 
 def plot_von_mises(
-    loaded_frame: LoadedFrame, points_per_member: int = 50, colormap: str = "turbo",
-    show_colorbar: bool = True, stress_limits: Optional[Tuple[float, float]] = None, save_path: Optional[str] = None
+    frame: "Frame",
+    *,
+    points_per_member: int = 50,
+    colormap: str = "turbo",
+    show_colorbar: bool = True,
+    stress_limits: Optional[Tuple[float, float]] = None,
+    save_path: Optional[str] = None,
 ) -> None:
     """Plot frame colored by Von Mises stress.
     
     Uses original (unsplit) members to ensure continuous stress distribution
     even when members are split at intermediate nodes.
     """
+    if save_path is not None:
+        save_path = _normalize_svg_path(save_path)
+
+    solve_state = getattr(frame, "_solve_state", None)
+    if solve_state is None:
+        raise RuntimeError("Frame must be analyzed before plotting von Mises stress.")
+
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
-    node_pos = loaded_frame.frame.node_positions
+    node_pos = solve_state.expanded_frame.node_positions
 
     # Build a single 3D line collection for performance and to avoid slow/fragile autoscaling.
     segments_list = []
     seg_stresses_list = []
 
     # Iterate over ORIGINAL members (not segments) for continuous stress plots
-    for m in loaded_frame.original_frame.members:
+    for m in frame.members:
         # Get member start/end positions from original frame
-        s = np.asarray(loaded_frame.original_frame.get_node(m.start_node_id).position, dtype=float)
-        e = np.asarray(loaded_frame.original_frame.get_node(m.end_node_id).position, dtype=float)
+        s = np.asarray(frame.get_node(m.start_node_id).position, dtype=float)
+        e = np.asarray(frame.get_node(m.end_node_id).position, dtype=float)
 
         # Get continuous action profile using demand_provider which stitches segments
         try:
-            profile = loaded_frame.demand_provider.actions(m.id, points=points_per_member)
+            profile = frame.demand_provider.actions(m.id, points=points_per_member)
             xs = profile.axial._x
             
             # Compute von Mises stress from the profile actions
@@ -494,19 +565,22 @@ def plot_von_mises(
     else:
         plt.show()
 
-def plot_results(loaded_frame: LoadedFrame, result_type: str = "von_mises", **kwargs) -> None:
+def plot_results(frame: "Frame", result_type: str = "von_mises", **kwargs) -> None:
     """Unified results plot."""
     if result_type == "von_mises":
-        plot_von_mises(loaded_frame, **kwargs)
+        plot_von_mises(frame, **kwargs)
     elif result_type == "deflection":
-        plot_deflection(loaded_frame, **kwargs)
+        plot_deflection(frame, **kwargs)
     else:
         raise ValueError(f"Invalid result_type: {result_type}")
 
-def plot_member_diagrams(loaded_frame: LoadedFrame, member_id: str, save_path: Optional[str] = None) -> None:
+def plot_member_diagrams(frame: "Frame", member_id: str, save_path: Optional[str] = None) -> None:
     """Plot internal force diagrams for a specific member using direct frame analysis."""
+    if save_path is not None:
+        save_path = _normalize_svg_path(save_path)
+
     # Use demand_provider for continuous results across split members
-    profile = loaded_frame.demand_provider.actions(member_id, points=201)
+    profile = frame.demand_provider.actions(member_id, points=201)
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     
     def _plot(ax, xs, vals, title, ylabel, label=None, c='b'):
@@ -537,7 +611,7 @@ def plot_member_diagrams(loaded_frame: LoadedFrame, member_id: str, save_path: O
 
 
 def plot_aisc_utilization(
-    loaded_frame: LoadedFrame,
+    frame: "Frame",
     show_node_ids: bool = True,
     save_path: Optional[str] = None,
     colormap: str = "RdYlGn_r",
@@ -551,16 +625,30 @@ def plot_aisc_utilization(
     For split members, uses the utilization of the original member (combined segments).
     Only one label is shown per original member (at the midpoint of the full member).
     """
+    if save_path is not None:
+        save_path = _normalize_svg_path(save_path)
+
+    solve_state = getattr(frame, "_solve_state", None)
+    if solve_state is None:
+        raise RuntimeError("Frame must be analyzed before plotting AISC utilization.")
+
+    analysis_frame = solve_state.expanded_frame
+
+    from ..checks import aisc_9
+
+    utilizations: dict[str, float] = {}
+    for m in frame.members:
+        if m.element_type != "beam":
+            utilizations[m.id] = 0.0
+            continue
+        try:
+            profile = frame.demand_provider.actions(m.id, points=801)
+            utilizations[m.id] = float(aisc_9.aisc_9_check(profile, length_unit="m", force_unit="N").utilisation)
+        except Exception:
+            utilizations[m.id] = 0.0
+
     fig = plt.figure(figsize=(12, 9))
     ax = fig.add_subplot(111, projection='3d')
-    
-    # Always use direct frame analysis method (get_aisc_utilizations)
-    # This uses MemberActionProfile from demand_provider, NOT to_loaded_beam() re-solve
-    utilizations = loaded_frame.get_aisc_utilizations()
-    
-    if not utilizations:
-        print("No utilizations computed")
-        return
     
     # Normalize utilizations for colormap
     util_values = [v for v in utilizations.values() if v > 0]
@@ -571,21 +659,27 @@ def plot_aisc_utilization(
     norm = Normalize(vmin=0.0, vmax=norm_max)
     cmap = plt.get_cmap(colormap)
     
-    node_pos = loaded_frame.frame.node_positions
+    node_pos = analysis_frame.node_positions
     
     # Track which original members have been labeled
     labeled_parents = set()
     
     # Plot members with color based on utilization
-    for member in loaded_frame.frame.members:
+    for member in analysis_frame.members:
         seg_id = member.id
         s, e = node_pos[member.start_node_id], node_pos[member.end_node_id]
         
         # Determine the parent member ID (for bundled/split members)
-        parent_id = loaded_frame._member_segment_parent.get(seg_id, seg_id)
+        if seg_id in solve_state.member_segment_parent:
+            parent_id = solve_state.member_segment_parent[seg_id]
+        else:
+            parent_id = seg_id
         
         # Look up utilization from the utilizations dict
-        util = utilizations.get(parent_id, 0.0)
+        if parent_id in utilizations:
+            util = utilizations[parent_id]
+        else:
+            util = 0.0
         
         color = cmap(norm(util))
         
@@ -594,20 +688,16 @@ def plot_aisc_utilization(
         # Add text label only once per original member (at full member midpoint)
         if parent_id not in labeled_parents:
             labeled_parents.add(parent_id)
-            # Get full member midpoint using original frame if available
-            try:
-                parent = loaded_frame.original_frame.get_member(parent_id)
-                parent_start = loaded_frame.original_frame.get_node(parent.start_node_id).position
-                parent_end = loaded_frame.original_frame.get_node(parent.end_node_id).position
-                mid = (parent_start + parent_end) / 2
-            except:
-                mid = (s + e) / 2
+            parent = frame.get_member(parent_id)
+            parent_start = frame.get_node(parent.start_node_id).position
+            parent_end = frame.get_node(parent.end_node_id).position
+            mid = (parent_start + parent_end) / 2
             ax.text(mid[0], mid[1], mid[2], f'{util:.3f}', fontsize=8, ha='center',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
     
     # Plot nodes and constraints
     for nid, pos in node_pos.items():
-        node = loaded_frame.frame.nodes[nid]
+        node = analysis_frame.nodes[nid]
         if node.support:
             # Constrained node: red dot
             ax.scatter([pos[0]], [pos[1]], [pos[2]], c='red', marker='s', s=100, zorder=10)
@@ -616,9 +706,15 @@ def plot_aisc_utilization(
             ax.scatter([pos[0]], [pos[1]], [pos[2]], c='black', marker='o', s=50, zorder=10)
         
         if show_node_ids:
-            offset = pos[2] * 0.05 if node.support else pos[2] * 0.08
-            label = str(node.support) if node.support else nid
-            ax.text(pos[0], pos[1], pos[2] + offset, label, fontsize=8, ha='center', color='gray')
+            if node.support:
+                offset = pos[2] * 0.05
+                label = str(node.support)
+                ax.text(pos[0], pos[1], pos[2] + offset, label, fontsize=8, ha='center', color='gray')
+            else:
+                # Avoid clutter: label only original nodes (not solver-inserted nodes)
+                if nid in frame.nodes:
+                    offset = pos[2] * 0.08
+                    ax.text(pos[0], pos[1], pos[2] + offset, nid, fontsize=8, ha='center', color='gray')
     
     # Add colorbar
     sm = ScalarMappable(cmap=cmap, norm=norm)
@@ -635,7 +731,6 @@ def plot_aisc_utilization(
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Saved AISC utilization plot to {save_path}")
     else:
         plt.show()
 

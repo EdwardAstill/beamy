@@ -14,8 +14,6 @@ import numpy as np
 from unity.core import conv
 
 from ..beam1d.analysis import LoadedMember
-from ..beam1d.beam import Beam1D
-from ..core.support import Support
 from ..core.results import Result
 from ..frame.results import MemberActionProfile
 
@@ -259,11 +257,27 @@ def _web_clear_depth(dim_dict: Dict[str, float]) -> Optional[float]:
     tf_val = _dim(dim_dict, "tf")
     return (depth - 2.0 * tf_val) if (depth and tf_val) else depth
 
-def _brace_positions(beam: Beam1D, axis: str) -> List[float]:
-    pos = [0.0, float(beam.L)]
-    for s in beam.supports:
-        lat = s.type[1] == "1" if axis == "strong" else s.type[2] == "1"
-        if lat and s.type[3] == "1": pos.append(float(s.x))
+def _brace_positions(loaded_member: LoadedMember, axis: str) -> List[float]:
+    """Infer bracing positions from the standalone member's supports.
+
+    This is a legacy convenience for `LoadedMember` inputs. For frame members and for
+    design-grade bracing, pass `bracing_positions=...` explicitly.
+    """
+    L = float(np.linalg.norm(np.asarray(loaded_member.end) - np.asarray(loaded_member.start)))
+    pos: List[float] = [0.0, L]
+
+    def consider(x: float, support_code: str) -> None:
+        lat = support_code[1] == "1" if axis == "strong" else support_code[2] == "1"
+        if lat and support_code[3] == "1":
+            pos.append(float(x))
+
+    consider(0.0, loaded_member.support_start)
+    consider(L, loaded_member.support_end)
+
+    for ps in getattr(loaded_member, "point_supports", []):
+        x = float(ps.position) * L if ps.position_type == "relative" else float(ps.position)
+        consider(x, ps.support)
+
     return sorted(set(pos))
 
 def _cb_for_segment(res: Result, x1: float, x2: float) -> Tuple[float, float, float, float]:
@@ -397,18 +411,19 @@ def _shear_checks(shear_res: Result, dims_info: Dict[str, Any], Fy: float, stiff
 
 
 def _profile_from_loaded_beam(loaded_beam: LoadedMember) -> MemberActionProfile:
-    beam = loaded_beam.beam
     try:
         torsion_action = loaded_beam.torsion().action
     except Exception:
         ax = loaded_beam.axial(points=3).action
         torsion_action = Result(ax._x, np.zeros_like(ax._values))
 
+    length_native = float(np.linalg.norm(np.asarray(loaded_beam.end) - np.asarray(loaded_beam.start)))
+
     return MemberActionProfile(
-        member_id=getattr(beam, "id", "beam"),
-        length=beam.L,
-        material=beam.material,
-        section=beam.section,
+        member_id=str(loaded_beam.id),
+        length=length_native,
+        material=loaded_beam.material,
+        section=loaded_beam.section,
         axial=loaded_beam.axial(points=801).action,
         shear_y=loaded_beam.shear("y").action,
         shear_z=loaded_beam.shear("z").action,
@@ -445,7 +460,7 @@ def aisc_9_check(
         brace_in = [conv(x, length_unit, "in") for x in bracing_positions]
     elif not isinstance(subject, MemberActionProfile):
         # Fall back to supports on the beam for legacy path
-        brace_in = _brace_positions(subject.beam, axis="strong")
+        brace_in = _brace_positions(subject, axis="strong")
         brace_in = [conv(x, length_unit, "in") for x in brace_in]
     strong_brace = _positions_with_ends(brace_in, length_in)
     weak_brace = strong_brace  # Use same positions unless user provides separate lists (not yet supported)
@@ -869,10 +884,14 @@ def aisc_chapter_e_check(
 
     This is axial-only. For combined P+M interaction, use Chapter H.
     """
-    beam = loaded_beam.beam if isinstance(loaded_beam, LoadedMember) else None
-    material = beam.material if beam else loaded_beam.material
-    section = beam.section if beam else loaded_beam.section
-    length_native = beam.L if beam else loaded_beam.length
+    if isinstance(loaded_beam, LoadedMember):
+        material = loaded_beam.material
+        section = loaded_beam.section
+        length_native = float(np.linalg.norm(np.asarray(loaded_beam.end) - np.asarray(loaded_beam.start)))
+    else:
+        material = loaded_beam.material
+        section = loaded_beam.section
+        length_native = loaded_beam.length
     if material.Fy is None:
         raise ValueError("Material.Fy is required.")
 

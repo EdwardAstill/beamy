@@ -1,5 +1,7 @@
 # Loads
 
+> **ARCHIVED (pre-vNext)**: This page documents the legacy load types (`PointForce`, `DistributedForce`, etc.) and may not match the current Beamy API. Current loads live in `LoadCase` as `NodalForce` / `MemberPointForce` / `MemberDistributedForce` etc. See `documentation/user guide/api.md`.
+
 Reference documentation for load definitions and load cases.
 
 ## Table of Contents

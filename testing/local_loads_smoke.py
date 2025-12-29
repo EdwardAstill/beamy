@@ -8,10 +8,8 @@ from __future__ import annotations
 import numpy as np
 
 from beamy.frame import FrameBuilder
-from beamy.core.material import Material
+from beamy import LoadCase, Material
 from sectiony.library import rhs
-from beamy.core.loads import FrameLoadCase
-from beamy.frame.analysis import LoadedFrame
 
 
 def main() -> None:
@@ -25,7 +23,7 @@ def main() -> None:
     b.support_at((0.0, 0.0, 0.0), "111111")
     frame = b.build()
 
-    lc = FrameLoadCase("local-loads")
+    lc = LoadCase("local-loads")
 
     # Apply a local member point moment about local z at midspan.
     # local z for this member (x along +X, orientation +Z => local y ~ +Z, local z ~ -Y)
@@ -36,19 +34,23 @@ def main() -> None:
     free_node = frame.get_member("M1").end_node_id
     lc.add_nodal_force(free_node, np.array([0.0, 100.0, 0.0]), coords="local", reference_member_id="M1")
 
-    loaded = LoadedFrame(frame, lc)
+    frame.analyze(lc)
 
     # Sanity prints
-    r0 = loaded.reactions[frame.get_member("M1").start_node_id]
+    start_node_id = frame.get_member("M1").start_node_id
+    if start_node_id in frame.reactions:
+        r0 = frame.reactions[start_node_id]
+    else:
+        r0 = np.zeros(6, dtype=float)
     print("Reactions at fixed end [Fx,Fy,Fz,Mx,My,Mz] =", np.round(r0, 6))
 
     # Get action profile directly from frame analysis instead of extraction
-    profile = loaded.demand_provider.actions("M1", points=201)
+    profile = frame.demand_provider.actions("M1", points=201)
     print("Bending moments (midspan):")
-    print(f"  My = {profile.bending_y.action.at(1.0):.3f} Nm")
-    print(f"  Mz = {profile.bending_z.action.at(1.0):.3f} Nm")
+    print(f"  My = {profile.bending_y.at(1.0):.3f} Nm")
+    print(f"  Mz = {profile.bending_z.at(1.0):.3f} Nm")
     print(f"Shear (midspan):")
-    print(f"  Vz = {profile.shear_z.action.at(1.0):.3f} N")
+    print(f"  Vz = {profile.shear_z.at(1.0):.3f} N")
 
 
 

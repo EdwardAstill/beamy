@@ -1,5 +1,7 @@
 # Stress Plotter
 
+> **ARCHIVED (pre-vNext)**: This page may not match the current Beamy API. `StressPlotter` remains supported for `LoadedMember`, but the surrounding examples may reference legacy types. See `documentation/user guide/api.md`.
+
 Reference documentation for plotting stress distributions on beam cross-sections at specific locations along the beam.
 
 ## Table of Contents

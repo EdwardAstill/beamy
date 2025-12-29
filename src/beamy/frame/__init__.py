@@ -1,9 +1,18 @@
 from .node import Node
 from .member import Member
 from .frame import Frame
-from .analysis import LoadedFrame
-from .results import MemberResults
+from .results import MemberResults, MemberDemand, MemberActionProfile
 from .builder import FrameBuilder, round_coord
-from ..core.loads import FrameLoadCase
+from ..core.loads import LoadCase
 
-__all__ = ["Node", "Member", "Frame", "LoadedFrame", "MemberResults", "FrameLoadCase", "FrameBuilder", "round_coord"]
+__all__ = [
+    "Node",
+    "Member",
+    "Frame",
+    "MemberResults",
+    "MemberDemand",
+    "MemberActionProfile",
+    "LoadCase",
+    "FrameBuilder",
+    "round_coord",
+]

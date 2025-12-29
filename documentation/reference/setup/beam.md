@@ -1,5 +1,7 @@
 # Beam Definitions
 
+> **ARCHIVED (pre-vNext)**: This reference page documents the legacy `Beam1D` API and may not match the current Beamy implementation. For the current frame-first API (including `Frame.analyze(...)` and `LoadedMember`), see `documentation/user guide/api.md`.
+
 Reference documentation for beam geometry, materials, sections, and supports.
 
 ## Table of Contents

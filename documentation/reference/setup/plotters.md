@@ -1,3 +1,5 @@
+> **ARCHIVED (pre-vNext)**: This reference page includes legacy `LoadedFrame` / `Beam1D`-era signatures and may not match the current frame-first API. For current plotting signatures (functions accept `Frame` and save `.svg`), see `documentation/user guide/api.md`.
+
 ````markdown
 # Plotting Functions
 

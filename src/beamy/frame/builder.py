@@ -131,38 +131,18 @@ class FrameBuilder:
         """
         Build the Frame from the defined members and supports.
         
-        Nodes are auto-generated from unique coordinates with IDs N0, N1, N2, etc.
+        Nodes are auto-generated from member endpoints.
         
         Returns:
             Frame object ready for analysis
         """
-        # Collect all unique coordinates
-        coord_to_id: Dict[Coord, str] = {}
-        node_counter = 0
-        
-        for spec in self._members:
-            for coord in (spec.start, spec.end):
-                if coord not in coord_to_id:
-                    coord_to_id[coord] = f"N{node_counter}"
-                    node_counter += 1
-        
-        # Create nodes
-        nodes: List[Node] = []
-        for coord, node_id in coord_to_id.items():
-            support = self._supports[coord] if coord in self._supports else None
-            nodes.append(Node(
-                id=node_id,
-                position=np.array(coord, dtype=float),
-                support=support,
-            ))
-        
-        # Create members
+        # Create members with positions
         members: List[Member] = []
         for spec in self._members:
             members.append(Member(
                 id=spec.id,
-                start_node_id=coord_to_id[spec.start],
-                end_node_id=coord_to_id[spec.end],
+                start=np.array(spec.start, dtype=float),
+                end=np.array(spec.end, dtype=float),
                 section=spec.section,
                 material=spec.material,
                 orientation=spec.orientation,
@@ -171,14 +151,26 @@ class FrameBuilder:
                 constraints=spec.constraints,
             ))
         
-        return Frame.from_nodes_and_members(nodes, members)
+        # Build frame (auto-generates nodes)
+        frame = Frame.from_members(members)
+        
+        # Apply supports to the auto-generated nodes
+        for coord, support_str in self._supports.items():
+            # Find the node at this coordinate
+            coord_arr = np.array(coord, dtype=float)
+            for node in frame.nodes.values():
+                if np.linalg.norm(node.position - coord_arr) < COORD_TOL:
+                    node.support = support_str
+                    break
+        
+        return frame
     
     def get_node_id_at(self, coord: Coord) -> Optional[str]:
         """
-        Get the node ID that will be assigned to a coordinate (after build).
+        Get the node ID that will be assigned to a coordinate.
         
-        This is useful for applying loads to specific nodes.
-        Must be called after all members are added.
+        Note: This requires building a temporary frame to determine node IDs.
+        For efficiency, consider using build_with_node_map() instead.
         
         Args:
             coord: (x, y, z) coordinate
@@ -186,16 +178,9 @@ class FrameBuilder:
         Returns:
             Node ID string or None if coordinate not found
         """
+        _, coord_to_id = self.build_with_node_map()
         rounded = round_coord(coord)
-        # Rebuild the coord_to_id mapping
-        coord_to_id: Dict[Coord, str] = {}
-        node_counter = 0
-        for spec in self._members:
-            for c in (spec.start, spec.end):
-                if c not in coord_to_id:
-                    coord_to_id[c] = f"N{node_counter}"
-                    node_counter += 1
-        return coord_to_id[rounded] if rounded in coord_to_id else None
+        return coord_to_id.get(rounded)
     
     def build_with_node_map(self) -> Tuple[Frame, Dict[Coord, str]]:
         """
@@ -207,39 +192,13 @@ class FrameBuilder:
         Returns:
             (Frame, coord_to_node_id mapping)
         """
-        # Build coord_to_id mapping
+        # Build the frame
+        frame = self.build()
+        
+        # Build the coordinate-to-node-ID mapping
         coord_to_id: Dict[Coord, str] = {}
-        node_counter = 0
-        for spec in self._members:
-            for coord in (spec.start, spec.end):
-                if coord not in coord_to_id:
-                    coord_to_id[coord] = f"N{node_counter}"
-                    node_counter += 1
+        for node in frame.nodes.values():
+            coord = round_coord(tuple(node.position))
+            coord_to_id[coord] = node.id
         
-        # Create nodes
-        nodes: List[Node] = []
-        for coord, node_id in coord_to_id.items():
-            support = self._supports[coord] if coord in self._supports else None
-            nodes.append(Node(
-                id=node_id,
-                position=np.array(coord, dtype=float),
-                support=support,
-            ))
-        
-        # Create members
-        members: List[Member] = []
-        for spec in self._members:
-            members.append(Member(
-                id=spec.id,
-                start_node_id=coord_to_id[spec.start],
-                end_node_id=coord_to_id[spec.end],
-                section=spec.section,
-                material=spec.material,
-                orientation=spec.orientation,
-                element_type=spec.element_type,
-                releases=spec.releases,
-                constraints=spec.constraints,
-            ))
-        
-        frame = Frame.from_nodes_and_members(nodes, members)
         return frame, coord_to_id

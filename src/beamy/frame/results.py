@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from ..core.material import Material
     from sectiony import Section
     from .frame import Frame
-    from ..core.loads import FrameLoadCase
+    from ..core.loads import LoadCase
 
 
 class _ActionOnlyResult:
@@ -235,7 +235,7 @@ class MemberDemandProvider:
     def __init__(
         self,
         frame: "Frame",
-        loads: "FrameLoadCase",
+        loads: "LoadCase",
         member_end_forces: Dict[str, Tuple[np.ndarray, np.ndarray]],
         member_bundle: Optional[Dict[str, List[str]]] = None,
     ) -> None:
@@ -427,3 +427,17 @@ class MemberDemandProvider:
         """Get force envelopes for an original (unsplit) member."""
         profile = self.actions_original(original_member_id, points_per_segment=points_per_segment)
         return profile.envelopes()
+
+
+@dataclass(frozen=True)
+class MemberDemand:
+    """Convenience wrapper for querying solved member demand under a load case."""
+
+    member_id: str
+    _provider: MemberDemandProvider
+
+    def actions(self, points: int = 201) -> MemberActionProfile:
+        return self._provider.actions(self.member_id, points=points)
+
+    def envelopes(self, points: int = 201) -> Dict[str, Tuple[float, float]]:
+        return self._provider.envelopes(self.member_id, points=points)

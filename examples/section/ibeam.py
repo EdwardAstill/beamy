@@ -1,79 +1,99 @@
-import numpy as np
+from __future__ import annotations
+
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 from sectiony.library import i as i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedMember, DistributedForce, plot_beam_diagram
+
+from beamy import (
+    LoadCase,
+    LoadedMember,
+    Material,
+    MemberDistributedForce,
+    MemberPointForce,
+    MemberPointSupport,
+    StressPlotter,
+    plot_beam_diagram,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Create an I-beam section
-# d=200mm depth, b=100mm width, tf=10mm flange, tw=6mm web, r=8mm fillet
-section = i_section(d=200, b=100, tf=10, tw=6, r=8)
 
-# Define material (steel)
-steel = Material(name="Steel", E=210e9, G=80e9)
+def main() -> None:
+    # Units: mm, N
+    section = i_section(d=200, b=100, tf=10, tw=6, r=8)
+    steel = Material(name="Steel", E=210e9, G=80e9)
 
-# Define supports (pinned at start, roller at end)
-supports = [
-    Support(x=0, type="111100"),      # Pinned (translations fixed, rotations free about y,z)
-    Support(x=1300, type="111111"),  # Pinned (translations fixed, rotations free about y,z)
-    Support(x=3000, type="011100"),   # Roller (y,z translations fixed)
-]
+    L = 3000.0  # mm
 
-# Create the beam (3m long)
-beam = Beam1D(L=3000, material=steel, section=section, supports=supports)
+    # Loading
+    loads = LoadCase(name="Test Load")
+    loads.member_point_forces.append(
+        MemberPointForce(
+            member_id="M1",
+            position=1000.0,
+            force=np.array([0.0, -5000.0, 0.0]),
+            coords="global",
+            position_type="absolute",
+        )
+    )
+    loads.member_distributed_forces.append(
+        MemberDistributedForce(
+            member_id="M1",
+            start_position=1300.0,
+            end_position=2500.0,
+            start_force=np.array([0.0, -5.0, 0.0]),
+            end_force=np.array([0.0, -1.0, 0.0]),
+            coords="global",
+        )
+    )
 
-# Create load case with point forces
-loads = LoadCase(name="Test Load")
+    # Supports: start/end + an intermediate support at x=1300 mm
+    lb = LoadedMember(
+        id="M1",
+        start=np.array([0.0, 0.0, 0.0]),
+        end=np.array([L, 0.0, 0.0]),
+        section=section,
+        material=steel,
+        orientation=np.array([0.0, 0.0, 1.0]),
+        support_start="111100",
+        support_end="011100",
+        point_supports=[MemberPointSupport(position=1300.0, support="111111")],
+        load_case=loads,
+    )
 
-loads.add_point_force(PointForce(
-    point=np.array([1000, 0, 0]),   # At 1m
-    force=np.array([0, -5000, 0])   # 5kN downward
-))
-# loads.add_moment(Moment(
-#     x=0,
-#     moment=np.array([0, 10000, 1000])
-# ))
-loads.add_distributed_force(DistributedForce(
-    start_position=np.array([2500, 0, 0]),
-    end_position=np.array([1300, 0, 0]),
-    start_force=np.array([0, -1, 0]),
-    end_force=np.array([0, -5, 0])
-))
+    # Find the location of maximum Von Mises stress
+    vm_results = lb.von_mises(points=401)
+    max_vm_idx = int(np.argmax(vm_results._values))
+    max_vm_x = float(vm_results._x[max_vm_idx])
+    max_vm_val = float(vm_results._values[max_vm_idx])
 
-# Create loaded beam (solves for reactions)
-lb = LoadedMember(beam, loads)
+    print(f"Max Von Mises Stress: {max_vm_val/1e6:.2f} MPa at x = {max_vm_x:.2f} mm")
 
-# Find the location of maximum Von Mises stress
-vm_results = lb.von_mises(points=200)  # Use more points for better resolution
-max_vm_idx = np.argmax(vm_results._values)
-max_vm_x = vm_results._x[max_vm_idx]
-max_vm_val = vm_results._values[max_vm_idx]
+    gallery_dir = PROJECT_ROOT / "gallery" / "section"
+    gallery_dir.mkdir(parents=True, exist_ok=True)
 
-print(f"Max Von Mises Stress: {max_vm_val/1e6:.2f} MPa at x = {max_vm_x:.2f} mm")
+    # Save beam diagram
+    plot_beam_diagram(
+        lb,
+        plot_stress=True,
+        plot_section=True,
+        save_path=str(gallery_dir / "ibeam_3d_diagram.svg"),
+    )
 
-# Plot the beam with forces and stress coloring
-from beamy import StressPlotter
+    # Plot section stress at the critical location
+    sp = StressPlotter(lb)
+    sp.plot_stress_at(
+        x_pos=max_vm_x,
+        stress_type="von_mises",
+        title=f"Max Von Mises Stress Section (x={max_vm_x:.0f}mm)",
+        cmap="plasma",
+        show=False,
+    )
+    plt.savefig(gallery_dir / "ibeam_section_stress.svg", bbox_inches="tight", dpi=300)
+    plt.close()
 
-gallery_dir = PROJECT_ROOT / "gallery" / "section"
-gallery_dir.mkdir(parents=True, exist_ok=True)
 
-# Save beam diagram
-plot_beam_diagram(
-    lb,
-    plot_stress=True,
-    plot_section=True,
-    save_path=str(gallery_dir / "ibeam_3d_diagram.svg")
-)
-
-# Plot section stress at the critical location
-sp = StressPlotter(lb)
-sp.plot_stress_at(
-    x_pos=max_vm_x,
-    stress_type="von_mises",
-    title=f"Max Von Mises Stress Section (x={max_vm_x:.0f}mm)",
-    cmap="plasma",
-    show=False
-)
-import matplotlib.pyplot as plt
-plt.savefig(gallery_dir / "ibeam_section_stress.svg", bbox_inches='tight', dpi=300)
-plt.close()
+if __name__ == "__main__":
+    main()

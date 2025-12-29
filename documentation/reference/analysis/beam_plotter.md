@@ -1,5 +1,7 @@
 # Beam Plotter
 
+> **ARCHIVED (pre-vNext)**: This page may not match the current Beamy plotting API. Current plotting helpers accept a solved `Frame` (or a `LoadedMember` wrapper) and save `.svg` by default. See `documentation/user guide/api.md`.
+
 Reference documentation for 3D visualization of beams, loads, and stress distributions.
 
 ## Table of Contents

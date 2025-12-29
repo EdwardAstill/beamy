@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 from beamy import Support
-from beamy.setup import plot_supports
+from beamy import plot_supports
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 

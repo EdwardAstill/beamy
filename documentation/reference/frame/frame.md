@@ -1,5 +1,7 @@
 # Frame Module
 
+> **ARCHIVED (pre-vNext)**: This page documents an older `FrameLoadCase` / `LoadedFrame` API surface and may not match the current frame-first Beamy API. Current usage is `frame.analyze(load_case)` with results cached on `Frame`. See `documentation/user guide/api.md`.
+
 Reference documentation for 3D frame structures composed of interconnected beam members.
 
 ## Table of Contents

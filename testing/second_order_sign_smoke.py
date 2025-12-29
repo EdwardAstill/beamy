@@ -1,9 +1,8 @@
 import numpy as np
 from sectiony.library import rhs
 
-from beamy import Material
-from beamy.frame import FrameBuilder, FrameLoadCase, LoadedFrame
-from beamy.frame.analysis import FrameAnalysisSettings
+from beamy import LoadCase, Material, FrameAnalysisSettings
+from beamy.frame import FrameBuilder
 
 
 def _find_node_id_at(frame, xyz, tol=1e-9):
@@ -49,8 +48,8 @@ def run() -> None:
         cable_tension_only=False,
     )
 
-    def solve_case(axial_right_fx: float) -> tuple[LoadedFrame, float]:
-        loads = FrameLoadCase("case")
+    def solve_case(axial_right_fx: float) -> float:
+        loads = LoadCase("case")
         loads.add_nodal_force(nL, np.array([axial_right_fx, 0.0, 0.0]), coords="global")
         loads.add_member_point_load(
             member_id="COL",
@@ -61,19 +60,22 @@ def run() -> None:
             position_type="absolute",
         )
 
-        lf = LoadedFrame(frame, loads, settings=settings)
-        if not lf.analysis_result.converged:
-            raise RuntimeError(f"Did not converge: {lf.analysis_result.warnings}")
+        frame.analyze(loads, settings=settings)
+        if not frame.analysis_result.converged:
+            raise RuntimeError(f"Did not converge: {frame.analysis_result.warnings}")
 
         # Midpoint node should exist after load expansion.
-        mid_id = _find_node_id_at(lf.frame, (0.5 * L, 0.0, 0.0), tol=1e-6)
-        uy = float(lf.nodal_displacements[mid_id][1])
-        return lf, uy
+        solve_state = frame._solve_state
+        if solve_state is None:
+            raise RuntimeError("Expected solve_state after analysis.")
+        mid_id = _find_node_id_at(solve_state.expanded_frame, (0.5 * L, 0.0, 0.0), tol=1e-6)
+        uy = float(frame.nodal_displacements[mid_id][1])
+        return uy
 
     # Compression: apply axial force toward the fixed end at x=0.
-    _, uy_comp = solve_case(-P)
+    uy_comp = solve_case(-P)
     # Tension: apply axial force away from the fixed end.
-    _, uy_tens = solve_case(+P)
+    uy_tens = solve_case(+P)
 
     print(f"uy_comp = {uy_comp:.6e} m")
     print(f"uy_tens = {uy_tens:.6e} m")

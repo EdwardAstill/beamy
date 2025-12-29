@@ -18,8 +18,17 @@ import numpy as np
 from pathlib import Path
 from sectiony.library import i as i_section
 
-from beamy import Material
-from beamy.frame import Node, Member, Frame, FrameLoadCase, LoadedFrame
+from beamy import (
+    LoadCase,
+    Material,
+    NodalForce,
+    Frame,
+    Member,
+    plot_deflection,
+    plot_frame,
+    plot_von_mises,
+)
+from beamy.frame import FrameBuilder
 
 # Create gallery subdirectories
 gallery_dir = Path("gallery")
@@ -41,52 +50,35 @@ section = i_section(d=0.2, b=0.2, tf=0.015, tw=0.010, r=0.0)
 L = 3.0  # Cube side length (3 meters)
 H = 3.0  # Cube height (3 meters)
 
-# 8 nodes forming a cube
-# Base nodes (Z=0) - all fixed
-nodes = [
-    Node("A", np.array([0.0, 0.0, 0.0]), support="111111"),  # Base corner 1
-    Node("B", np.array([L, 0.0, 0.0]), support="111111"),    # Base corner 2
-    Node("C", np.array([L, L, 0.0]), support="111111"),      # Base corner 3
-    Node("D", np.array([0.0, L, 0.0]), support="111111"),    # Base corner 4
-    # Top nodes (Z=H) - free
-    Node("E", np.array([0.0, 0.0, H])),                      # Top corner 1
-    Node("F", np.array([L, 0.0, H])),                        # Top corner 2
-    Node("G", np.array([L, L, H])),                          # Top corner 3 (where force is applied)
-    Node("H", np.array([0.0, L, H])),                        # Top corner 4
-]
-
-# 12 members forming cube edges
-members = []
+# Use FrameBuilder for cleaner coordinate-based definition
+fb = FrameBuilder(default_orientation=(0, 0, 1))
 
 # Vertical columns (4)
-# Orientation: local y-axis in +X direction for columns on Y=0 and Y=L edges
-#              local y-axis in +Y direction for columns on X=0 and X=L edges
-members.extend([
-    Member("col_AE", "A", "E", section, steel, np.array([1.0, 0.0, 0.0])),  # Front-left
-    Member("col_BF", "B", "F", section, steel, np.array([0.0, 1.0, 0.0])),  # Front-right
-    Member("col_CG", "C", "G", section, steel, np.array([1.0, 0.0, 0.0])),  # Back-right
-    Member("col_DH", "D", "H", section, steel, np.array([0.0, 1.0, 0.0])),  # Back-left
-])
+fb.add("col_AE", (0.0, 0.0, 0.0), (0.0, 0.0, H), section, steel, orientation=(1.0, 0.0, 0.0))  # Front-left
+fb.add("col_BF", (L, 0.0, 0.0), (L, 0.0, H), section, steel, orientation=(0.0, 1.0, 0.0))      # Front-right
+fb.add("col_CG", (L, L, 0.0), (L, L, H), section, steel, orientation=(1.0, 0.0, 0.0))          # Back-right
+fb.add("col_DH", (0.0, L, 0.0), (0.0, L, H), section, steel, orientation=(0.0, 1.0, 0.0))      # Back-left
 
 # Base beams (4) - connecting base nodes
-# Orientation: local y-axis points up (+Z) for horizontal members
-members.extend([
-    Member("base_AB", "A", "B", section, steel, np.array([0.0, 0.0, 1.0])),  # Front
-    Member("base_BC", "B", "C", section, steel, np.array([0.0, 0.0, 1.0])),  # Right
-    Member("base_CD", "C", "D", section, steel, np.array([0.0, 0.0, 1.0])),  # Back
-    Member("base_DA", "D", "A", section, steel, np.array([0.0, 0.0, 1.0])),  # Left
-])
+fb.add("base_AB", (0.0, 0.0, 0.0), (L, 0.0, 0.0), section, steel)  # Front
+fb.add("base_BC", (L, 0.0, 0.0), (L, L, 0.0), section, steel)      # Right
+fb.add("base_CD", (L, L, 0.0), (0.0, L, 0.0), section, steel)      # Back
+fb.add("base_DA", (0.0, L, 0.0), (0.0, 0.0, 0.0), section, steel)  # Left
 
 # Top beams (4) - connecting top nodes
-members.extend([
-    Member("top_EF", "E", "F", section, steel, np.array([0.0, 0.0, 1.0])),   # Front
-    Member("top_FG", "F", "G", section, steel, np.array([0.0, 0.0, 1.0])),   # Right
-    Member("top_GH", "G", "H", section, steel, np.array([0.0, 0.0, 1.0])),   # Back
-    Member("top_HE", "H", "E", section, steel, np.array([0.0, 0.0, 1.0])),   # Left
-])
+fb.add("top_EF", (0.0, 0.0, H), (L, 0.0, H), section, steel)       # Front
+fb.add("top_FG", (L, 0.0, H), (L, L, H), section, steel)           # Right
+fb.add("top_GH", (L, L, H), (0.0, L, H), section, steel)           # Back
+fb.add("top_HE", (0.0, L, H), (0.0, 0.0, H), section, steel)       # Left
 
-# Create frame
-frame = Frame.from_nodes_and_members(nodes, members)
+# Apply fixed supports at all base nodes (z=0)
+fb.support_at((0.0, 0.0, 0.0), "111111")
+fb.support_at((L, 0.0, 0.0), "111111")
+fb.support_at((L, L, 0.0), "111111")
+fb.support_at((0.0, L, 0.0), "111111")
+
+# Build frame
+frame, coord_to_node = fb.build_with_node_map()
 
 print("=" * 70)
 print("3D CUBE FRAME GEOMETRY")
@@ -99,7 +91,7 @@ print(f"Top nodes (free): E, F, G, H")
 # ============================================
 # 3. APPLY FORCE AT TOP CORNER
 # ============================================
-loads = FrameLoadCase("Force at top corner towards center")
+loads = LoadCase(name="Force at top corner towards center")
 
 # Force at node G (top corner at [L, L, H])
 # Direction: towards center of cube at [L/2, L/2, H/2]
@@ -115,7 +107,7 @@ force_vector = force_magnitude * force_direction_normalized
 print(f"\n{'=' * 70}")
 print("APPLIED LOAD")
 print("=" * 70)
-print(f"Node: G (top corner at [{L:.1f}, {L:.1f}, {H:.1f}])")
+print(f"Node: {top_corner_node} (top corner at [{L:.1f}, {L:.1f}, {H:.1f}])")
 print(f"Center of cube: [{L/2:.1f}, {L/2:.1f}, {H/2:.1f}]")
 print(f"Force magnitude: {force_magnitude/1000:.1f} kN")
 print(f"Force direction (normalized): [{force_direction_normalized[0]:.3f}, {force_direction_normalized[1]:.3f}, {force_direction_normalized[2]:.3f}]")
@@ -124,7 +116,9 @@ print(f"  FX = {force_vector[0]/1000:.2f} kN (towards -X)")
 print(f"  FY = {force_vector[1]/1000:.2f} kN (towards -Y)")
 print(f"  FZ = {force_vector[2]/1000:.2f} kN (downward)")
 
-loads.add_nodal_force("G", force_vector)
+# Get node ID at top corner (L, L, H)
+top_corner_node = coord_to_node[(L, L, H)]
+loads.add_nodal_force(top_corner_node, force_vector)
 
 # ============================================
 # 4. ANALYZE
@@ -133,7 +127,7 @@ print(f"\n{'=' * 70}")
 print("PERFORMING 3D FRAME ANALYSIS")
 print("=" * 70)
 
-loaded_frame = LoadedFrame(frame, loads)
+frame.analyze(loads)
 
 print("Analysis complete!")
 
@@ -145,8 +139,15 @@ print("SUPPORT REACTIONS")
 print("=" * 70)
 
 total_reaction = np.zeros(3)
-for node_id in ["A", "B", "C", "D"]:
-    reaction = loaded_frame.reactions[node_id]
+# Get base node IDs
+base_nodes = [coord_to_node[(0.0, 0.0, 0.0)], coord_to_node[(L, 0.0, 0.0)],
+              coord_to_node[(L, L, 0.0)], coord_to_node[(0.0, L, 0.0)]]
+
+for node_id in base_nodes:
+    if node_id in frame.reactions:
+        reaction = frame.reactions[node_id]
+    else:
+        reaction = np.zeros(6, dtype=float)
     forces = reaction[:3]
     moments = reaction[3:]
     total_reaction += forces
@@ -174,7 +175,7 @@ print("TOP NODE DISPLACEMENTS")
 print("=" * 70)
 
 for node_id in ["E", "F", "G", "H"]:
-    disp = loaded_frame.nodal_displacements[node_id]
+    disp = frame.nodal_displacements[node_id]
     disp_mag = np.linalg.norm(disp[:3])
     
     print(f"\nNode {node_id}:")
@@ -195,8 +196,35 @@ max_stress_member = None
 
 print("\nColumn stresses:")
 for col_id in ["col_AE", "col_BF", "col_CG", "col_DH"]:
-    member_results = loaded_frame.get_member_results(col_id)
-    vm_max = member_results.von_mises.max
+    profile = frame.demand_provider.actions(col_id, points=401)
+    member = frame.get_member(col_id)
+
+    A = member.section.A
+    Iy = member.section.Iy
+    Iz = member.section.Iz
+    J = member.section.J
+    y_max = member.section.y_max
+    z_max = member.section.z_max
+    r_max = max(abs(y_max), abs(z_max))
+
+    N = profile.axial._values
+    Vy = profile.shear_y._values
+    Vz = profile.shear_z._values
+    T = profile.torsion._values
+    My = profile.bending_y._values
+    Mz = profile.bending_z._values
+
+    sigma_axial = N / A if A > 0 else np.zeros_like(N)
+    sigma_bending_y = np.abs(My) * z_max / Iy if Iy > 0 else np.zeros_like(My)
+    sigma_bending_z = np.abs(Mz) * y_max / Iz if Iz > 0 else np.zeros_like(Mz)
+    sigma = np.abs(sigma_axial) + sigma_bending_y + sigma_bending_z
+
+    tau_shear = (np.abs(Vy) + np.abs(Vz)) / A if A > 0 else np.zeros_like(Vy)
+    tau_torsion = np.abs(T) * r_max / J if J > 0 else np.zeros_like(T)
+    tau = tau_shear + tau_torsion
+
+    vm = np.sqrt(sigma**2 + 3.0 * tau**2)
+    vm_max = float(np.max(vm))
     print(f"  {col_id}: {vm_max/1e6:.1f} MPa")
     
     if vm_max > max_stress:
@@ -216,7 +244,8 @@ print("=" * 70)
 
 # Basic geometry with force and reactions
 print("1. Cube frame geometry with loads...")
-loaded_frame.plot(
+plot_frame(
+    frame,
     deformed=True,
     scale_factor=100,
     show_loads=True,
@@ -226,7 +255,8 @@ loaded_frame.plot(
 
 # Deflection visualization
 print("2. Deflection pattern...")
-loaded_frame.plot_deflection(
+plot_deflection(
+    frame,
     scale_factor=100,
     colormap="viridis",
     show_undeformed=True,
@@ -235,7 +265,8 @@ loaded_frame.plot_deflection(
 
 # Von Mises stress
 print("3. Von Mises stress distribution...")
-loaded_frame.plot_von_mises(
+plot_von_mises(
+    frame,
     colormap="turbo",
     stress_limits=(0, steel.Fy),
     save_path=str(frame_dir / "cube_frame_von_mises.svg")

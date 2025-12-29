@@ -6,8 +6,8 @@ This is a lightweight script (no pytest) intended to be run directly:
 
 import numpy as np
 
-from beamy import Material, NodalSpring
-from beamy.frame import Node, Member, Frame, FrameLoadCase, LoadedFrame
+from beamy import LoadCase, Material, NodalSpring
+from beamy import Frame, Member, Node
 from sectiony.library import i as i_section
 
 
@@ -16,26 +16,31 @@ def main() -> None:
     sect = i_section(d=0.5, b=0.2, tf=0.02, tw=0.01, r=0.0)
 
     L = 4.0
-    nodes = [
-        Node("A", np.array([0.0, 0.0, 0.0]), support="111111"),
-        Node("B", np.array([L, 0.0, 0.0]), support=None),
-    ]
-    members = [Member("M1", "A", "B", sect, mat, np.array([0.0, 1.0, 0.0]))]
-    frame = Frame.from_nodes_and_members(nodes, members)
+    members = [Member("M1", 
+                     start=np.array([0.0, 0.0, 0.0]),
+                     end=np.array([L, 0.0, 0.0]),
+                     section=sect,
+                     material=mat,
+                     orientation=np.array([0.0, 1.0, 0.0]))]
+    frame = Frame.from_members(members)
+    
+    # Apply fixed support at start node (auto-generated as N0)
+    frame.nodes["N0"].support = "111111"
 
     P = 10_000.0  # N downward
     k_s = 2.0e6   # N/m vertical spring at B (Uz)
 
-    loads = FrameLoadCase("tip load + spring")
-    loads.add_nodal_force("B", np.array([0.0, 0.0, -P]), coords="global")
+    loads = LoadCase("tip load + spring")
+    # End node is auto-generated as N1
+    loads.add_nodal_force("N1", np.array([0.0, 0.0, -P]), coords="global")
 
     K6 = np.zeros((6, 6))
     K6[2, 2] = k_s
-    loads.nodal_springs.append(NodalSpring(node_id="B", K=K6, coords="global"))
+    loads.nodal_springs.append(NodalSpring(node_id="N1", K=K6, coords="global"))
 
-    lf = LoadedFrame(frame, loads)
+    frame.analyze(loads)
 
-    dB = lf.analysis_result.nodal_displacements["B"]
+    dB = frame.analysis_result.nodal_displacements["N1"]
     w = float(dB[2])  # Uz
 
     # For a cantilever with end load in Uz, effective beam spring stiffness is k_beam = 3 E Iy / L^3
@@ -44,7 +49,7 @@ def main() -> None:
 
     # Reactions: beamy reports reactions as the force the structure applies to the support.
     # With a downward applied load (negative Uz), the reported Uz reaction is also negative.
-    RAz = float(lf.analysis_result.reactions_physical["A"][2])
+    RAz = float(frame.analysis_result.reactions_physical["N0"][2])
     RAz_expected = -P * (k_beam / (k_beam + k_s))
 
     assert np.isfinite(w)

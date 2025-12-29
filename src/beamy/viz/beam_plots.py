@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, List
+import os
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
@@ -10,6 +11,14 @@ if TYPE_CHECKING:
     from ..beam1d.analysis import LoadedMember
     from ..core.support import Support
     from sectiony import Section
+
+
+def _normalize_svg_path(save_path: str) -> str:
+    root, ext = os.path.splitext(save_path)
+    if ext.lower() != ".svg":
+        return f"{root}.svg"
+    return save_path
+
 
 def _create_arrow_cone(tip, direction, cone_length, cone_radius, num_segments=8):
     base_center = tip - direction * cone_length
@@ -99,42 +108,26 @@ def _plot_moments(ax, moments, beam_L):
     if all_b: ax.add_collection3d(Poly3DCollection(all_b, facecolor='#4444dd', edgecolor='#4444dd'))
 
 def plot_beam_diagram(loaded_member: LoadedMember, plot_stress=False, plot_section=True, plot_supports=True, save_path=None):
-    beam, loads = loaded_member.beam, loaded_member.loads
-    fig = plt.figure(figsize=(12, 8)); ax = fig.add_subplot(111, projection='3d')
-    sc_y, sc_z = getattr(beam.section, 'SCy', 0.0), getattr(beam.section, 'SCz', 0.0)
-    if plot_section and beam.section.geometry:
-        for contour in beam.section.geometry.contours:
-            pts = np.array(contour.discretize())
-            y, z = pts[:,0]-sc_y, pts[:,1]-sc_z
-            ax.plot(z, np.zeros_like(z), y, color='grey', lw=1.5)
-            ax.add_collection3d(Poly3DCollection([list(zip(z, np.zeros_like(z), y))], facecolor='grey', alpha=0.3))
+    # vNext: `LoadedMember` is a 2-node / 1-member frame analysis wrapper.
+    # Delegate plotting to the generic frame plotter to support arbitrary member orientation.
+    from .frame_plots import plot_frame, plot_von_mises
+
+    frame = loaded_member.frame
     if plot_stress:
-        res = loaded_member.von_mises(100)
-        pts = np.array([[0, x, 0] for x in res._x])
-        segments = np.array([[pts[i], pts[i+1]] for i in range(len(pts)-1)])
-        norm = Normalize(vmin=res.min(), vmax=res.max())
-        colors = cm.plasma(norm((res._values[:-1]+res._values[1:])/2))
-        ax.add_collection3d(Line3DCollection(segments, colors=colors, lw=3))
-        plt.colorbar(cm.ScalarMappable(norm=norm, cmap=cm.plasma), ax=ax, label='Max Von Mises Stress', shrink=0.6)
-    else: ax.plot([0,0], [0,beam.L], [0,0], color='black', lw=2)
-    _plot_point_forces(ax, loads.point_forces, beam.L)
-    _plot_moments(ax, loads.moments, beam.L)
-    _plot_distributed_forces(ax, loads.dist_forces, beam.L)
-    if plot_supports:
-        for s in beam.supports:
-            ax.scatter([0], [s.x], [0], marker='o', ec='black', fc='white', s=50, zorder=300)
-            ax.text(0, s.x, beam.L/60, s.type, fontsize=8, ha='center', color='black', zorder=200)
-    all_y, all_z = [], []
-    if beam.section.geometry:
-        for c in beam.section.geometry.contours: p=np.array(c.discretize()); all_y.extend(p[:,0]-sc_y); all_z.extend(p[:,1]-sc_z)
-    yz_R = max(max(abs(min(all_y or [0])), abs(max(all_y or [0])), abs(min(all_z or [0])), abs(max(all_z or [0])))*1.5, beam.L*0.1)
-    ax.set_xlim(-yz_R, yz_R); ax.set_ylim(0, beam.L); ax.set_zlim(-yz_R, yz_R)
-    ax.set_box_aspect([2*yz_R, beam.L, 2*yz_R]); ax.grid(False)
-    for p in [ax.xaxis, ax.yaxis, ax.zaxis]: p.set_pane_color((1,1,1,0))
-    ax.xaxis.line.set_color((1,1,1,0)); ax.set_xticks([]); ax.set_ylabel('x', labelpad=20); ax.set_zlabel('y', labelpad=-10); ax.set_zticks([])
-    fig.patch.set_facecolor('white'); ax.set_facecolor('white'); ax.view_init(elev=20, azim=-60)
-    if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300); plt.close(fig)
-    else: plt.show()
+        plot_von_mises(frame, save_path=save_path)
+        return
+
+    plot_frame(
+        frame,
+        show_loads=True,
+        show_moments=True,
+        show_member_ids=False,
+        show_node_ids=True,
+        deformed=False,
+        scale_factor=1.0,
+        show_reactions=False,
+        save_path=save_path,
+    )
 
 def plot_analysis_results(loaded_member: LoadedMember, save_path=None, show=True, points=100, units=None):
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 8))
@@ -155,14 +148,15 @@ def plot_analysis_results(loaded_member: LoadedMember, save_path=None, show=True
     ax4.set_title("Axial Force & Torsion"); ax4.set_xlabel(f"Position{ul}"); ax4.grid(True, ls=':', alpha=0.6); ax4.axhline(0, c='k', lw=0.5)
     lns = l1+l2; ax4.legend(lns, [l.get_label() for l in lns])
     plt.tight_layout()
-    if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    if save_path:
+        save_path = _normalize_svg_path(str(save_path))
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
     if show: plt.show()
 
 class StressPlotter:
     """Plots stress distributions on the beam's cross-section."""
     def __init__(self, loaded_member: LoadedMember):
         self.loaded_member = loaded_member
-        self.beam = loaded_member.beam
 
     def _get_internal_forces_at(self, x_pos: float) -> dict[str, float]:
         def get_val(analysis_res, x):
@@ -179,7 +173,15 @@ class StressPlotter:
     def plot_stress_at(self, x_pos: float, stress_type="von_mises", ax=None, show=True, cmap="viridis", title=None):
         from sectiony.stress import Stress
         f = self._get_internal_forces_at(x_pos)
-        stress = Stress(section=self.beam.section, N=f["N"], Vy=f["Vy"], Vz=f["Vz"], Mx=f["Mx"], My=f["My"], Mz=f["Mz"])
+        stress = Stress(
+            section=self.loaded_member.section,
+            N=f["N"],
+            Vy=f["Vy"],
+            Vz=f["Vz"],
+            Mx=f["Mx"],
+            My=f["My"],
+            Mz=f["Mz"],
+        )
         ax = stress.plot(stress_type=stress_type, ax=ax, show=False, cmap=cmap)
         if ax:
             ax.set_title(title or f"{ax.get_title()}\n@ x={x_pos:.3f}")
@@ -192,9 +194,11 @@ def plot_section(section: Section, ax: Optional[plt.Axes] = None, show: bool = T
 
 def plot_loads(ax, load_case, beam_length: float):
     if not load_case: return
-    _plot_point_forces(ax, load_case.point_forces, beam_length)
-    _plot_moments(ax, load_case.moments, beam_length)
-    _plot_distributed_forces(ax, load_case.dist_forces, beam_length)
+    # Legacy helper (Beam1D-style loads) retained for backward scripts.
+    if hasattr(load_case, "point_forces"):
+        _plot_point_forces(ax, load_case.point_forces, beam_length)
+        _plot_moments(ax, load_case.moments, beam_length)
+        _plot_distributed_forces(ax, load_case.dist_forces, beam_length)
 
 def plot_supports(supports: List[Support], beam_length: float, unit: str = "m", save_path: Optional[str] = None, show: bool = True):
     fig, ax = plt.subplots(figsize=(10, 2))
@@ -207,6 +211,8 @@ def plot_supports(supports: List[Support], beam_length: float, unit: str = "m", 
             ax.annotate(f"{s.x} {unit}", (s.x, 0), xytext=(0, -20), textcoords='offset points', ha='center', va='top')
     ax.set_xlim(-beam_length*0.1, beam_length*1.1); ax.set_ylim(-1, 1); ax.axis('off')
     plt.tight_layout()
-    if save_path: plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    if save_path:
+        save_path = _normalize_svg_path(str(save_path))
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
     if show: plt.show()
 

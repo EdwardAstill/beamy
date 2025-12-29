@@ -7,12 +7,15 @@ Demonstrates comprehensive stress analysis including:
 - Comparing different stress types
 """
 
-import numpy as np
+from __future__ import annotations
+
 from pathlib import Path
+
 import matplotlib.pyplot as plt
+import numpy as np
 from sectiony.library import i_section
-from beamy import Beam1D, Material, Support, LoadCase, PointForce, LoadedMember, StressPlotter
-from beamy.analysis.beam_plotter import plot_beam_diagram
+
+from beamy import LoadCase, LoadedMember, Material, MemberPointForce, StressPlotter, plot_beam_diagram
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,31 +27,41 @@ gallery_dir.mkdir(parents=True, exist_ok=True)
 steel = Material(name="Steel", E=200e9, G=80e9)
 section = i_section(d=0.25, b=0.12, tf=0.012, tw=0.007, r=0.01)
 
-# 2. Create Beam
 L = 4.0
-beam = Beam1D(
-    L=L,
-    material=steel,
-    section=section,
-    supports=[
-        Support(x=0.0, type="111000"),
-        Support(x=L, type="011000")
-    ]
-)
 
 # 3. Apply Loads
 loads = LoadCase(name="Stress Analysis")
-loads.add_point_force(PointForce(
-    point=np.array([1.5, 0.0, 0.0]),
-    force=np.array([0.0, 0.0, -12_000.0])  # 12 kN downward
-))
-loads.add_point_force(PointForce(
-    point=np.array([2.5, 0.0, 0.0]),
-    force=np.array([0.0, 0.0, -8_000.0])   # 8 kN downward
-))
+loads.member_point_forces.append(
+    MemberPointForce(
+        member_id="M1",
+        position=1.5,
+        force=np.array([0.0, 0.0, -12_000.0]),
+        coords="global",
+        position_type="absolute",
+    )
+)
+loads.member_point_forces.append(
+    MemberPointForce(
+        member_id="M1",
+        position=2.5,
+        force=np.array([0.0, 0.0, -8_000.0]),
+        coords="global",
+        position_type="absolute",
+    )
+)
 
 # 4. Solve
-lb = LoadedMember(beam, loads)
+lb = LoadedMember(
+    id="M1",
+    start=np.array([0.0, 0.0, 0.0]),
+    end=np.array([L, 0.0, 0.0]),
+    section=section,
+    material=steel,
+    orientation=np.array([0.0, 1.0, 0.0]),
+    support_start="111100",
+    support_end="011000",
+    load_case=loads,
+)
 
 # 5. Find Critical Stress Location
 vm_results = lb.von_mises(points=200)

@@ -35,7 +35,7 @@ That lets member checks (AISC Chapter E/F/H, future EC3/AS checks) consume deman
 
 beamy has two closely related analysis layers:
 
-1. **Beam1D** analysis (Euler–Bernoulli beam theory), used for single members in isolation.
+1. **Single-member analysis** via `LoadedMember` (implemented as a 2-node / 1-member frame solve).
 2. **Frame** analysis (3D frame), used to solve connected structures with 6 DOFs per node.
 
 The current implementation prioritizes **direct frame analysis** as the canonical approach:

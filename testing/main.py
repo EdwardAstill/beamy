@@ -1,87 +1,55 @@
-# main.py
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
-# Add the src directory to the path so we can import beamy as a package
-src_path = Path(__file__).parent.parent / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
 import numpy as np
-from beamy.setup import Beam1D, Material, Support, LoadCase, PointForce
-from beamy.section import Section, Geometry, Shape
-from beamy.analysis import LoadedMember
+from sectiony.library import rhs
 
-def main():
-    # 1. Define Properties
+# Add the src directory to the path so we can import beamy as a package
+SRC_PATH = Path(__file__).resolve().parents[1] / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from beamy import LoadCase, LoadedMember, Material, MemberPointForce, plot_beam_diagram
+
+
+def main() -> None:
     mat = Material(name="Steel", E=200e9, G=80e9)
-    
-    # Define geometry for plotting (Rectangular 0.2 x 0.1)
-    # Centered at (0,0) so +/- 0.05 and +/- 0.1
-    # y is vertical (height 0.2), z is horizontal (width 0.1)
-    # y range: -0.1 to 0.1
-    # z range: -0.05 to 0.05
-    points = [
-        (0.1, 0.05),   # Top Right
-        (-0.1, 0.05),  # Bottom Right
-        (-0.1, -0.05), # Bottom Left
-        (0.1, -0.05),  # Top Left
-        (0.1, 0.05)    # Close loop
-    ]
-    shape = Shape(points=points)
-    geom = Geometry(shapes=[shape])
-    
-    sec = Section(name="Test", geometry=geom) # Properties calculated from geometry
-    
-    L = 1.0  # 1 m beam
+    sec = rhs(b=0.1, h=0.2, t=0.005, r=0.0)
 
-    # 2. Create Beam
-    beam = Beam1D(
-        L=L,
-        material=mat,
-        section=sec,
-        supports=[
-            Support(x=0.0, type="111100"), # Pinned + Fixed Rotation about X
-            Support(x=L, type="011000")    # Roller
-        ]
-    )
-
-    # 3. Apply Loads
-    # 10 kN downward at midspan
-    P = -10_000.0  # negative in local z (since we plot z as horizontal transverse usually, but let's see. 
-    # beam.py: y is usually vertical bending axis (Iz), z is horizontal (Iy). 
-    # Force in z is horizontal load. Force in y is vertical load.
-    
-    load = PointForce(
-        point=np.array([0.5, 0.0, 0.0]), # x, y, z
-        force=np.array([0.0, 0.0, P]), # Load in Z direction (Transverse horizontal)
-    )
+    L = 1.0  # m
 
     lc = LoadCase(name="Case 1")
-    lc.add_point_force(load)
+    lc.member_point_forces.append(
+        MemberPointForce(
+            member_id="M1",
+            position=L / 2.0,
+            force=np.array([0.0, 0.0, -10_000.0]),
+            coords="global",
+            position_type="absolute",
+        )
+    )
 
-    # 4. Solve
-    lb = LoadedMember(beam, lc)
+    lm = LoadedMember(
+        id="M1",
+        start=np.array([0.0, 0.0, 0.0]),
+        end=np.array([L, 0.0, 0.0]),
+        section=sec,
+        material=mat,
+        orientation=np.array([0.0, 1.0, 0.0]),
+        support_start="111100",
+        support_end="011000",
+        load_case=lc,
+    )
 
-    # 5. Output Results
-    print("All Loads (Applied + Reactions):")
-    for x, t, v in lb.all_loads:
-        print(f"  x={x:.2f}, type={t}, value={v:.2f}")
-        
-    print("\nResults along beam:")
-    shear_res = lb.shear("z")
-    bend_res = lb.bending("z")
-    defl_res = lb.deflection("z")
-    
-    for x in np.linspace(0.0, L, 11):
-        vz = shear_res.action.at(x)
-        mz = bend_res.action.at(x)
-        w = defl_res.at(x)
-        print(f"x={x:.2f}: Vz={vz:.2f}, Mz={mz:.2f}, w={w:.6e}")
+    profile = lm.member_demand().actions(points=401)
+    print("Max |Vz| =", profile.shear_z.abs_max)
+    print("Max |My| =", profile.bending_y.abs_max)
 
-    # 6. Plot
-    print("\nPlotting beam diagram...")
-    lb.plot()
+    # Plot (interactive)
+    plot_beam_diagram(lm, plot_stress=False, plot_section=True, save_path=None)
+
 
 if __name__ == "__main__":
     main()
