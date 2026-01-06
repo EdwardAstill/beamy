@@ -70,12 +70,6 @@ beamy/
 
 ```
 
-```
-beamy/
-  pyproject.toml
-  README.md
-```
-
 * **pyproject.toml**: packaging metadata, dependencies (numpy, scipy optional, matplotlib), dev deps (pytest).
 * **README.md**: minimal examples (build frame, apply loadcase, analyze, plot, design check).
 
@@ -113,6 +107,10 @@ model/member.py
 ```
 
 * `Member` dataclass: endpoints (`end_i`, `end_j`), `kind`, properties refs, releases, stations, second-order flags.
+* **DesignProperties**: Separate physical length from design parameters.
+  * `Lx`, `Ly` (unbraced lengths)
+  * `Kx`, `Ky`, `Kz` (effective length factors)
+  * `Cb` (moment gradient factor)
 * Derived geometry helpers that *require* a `Frame` (e.g., `length(frame)`, `local_axes(frame)`).
 * No global assembly, no solving, no caching results.
 
@@ -121,9 +119,14 @@ model/frame.py
 ```
 
 * `Frame` dataclass holding `nodes`, `members`, `connections`, `merge_tol`.
+* **Registries**: `materials: dict[str, Material]`, `sections: SectionRegistry`. 
+  * **SectionRegistry**: Smart lookup that auto-populates standard shapes (e.g., "W14X90") from a DB/CSV on first access.
+  * Ensures single source of truth and validation at build time.
+  * Members store `material_id` / `section_id` strings, resolved against these registries.
 * Model-building methods: `add_node`, `add_member`, `connect_end_to_member`, optional `remove_*`.
 * `validate()` for IDs, missing properties, invalid station ranges, etc.
-* Convenience wrappers: `analyze(loadcase, settings)` and `plot(...)` are OK, but should delegate to `analysis/` and `viz/`.
+* Convenience wrappers: `analyze(loadcase, settings)` and `plot(...)`.
+  * **Import Rule**: Use local imports (e.g., `from beamy.analysis.engine import run_analysis`) inside these methods to avoid circular dependencies.
 
 ```
 model/dof.py
@@ -238,8 +241,11 @@ analysis/mesh.py
 ```
 
 * Builds `AnalysisModel` from `Frame + LoadCase`:
-
-  * gather stations from: member.stations + connections + point loads + supports
+  * **Automated Station Discovery (Station Manager)**:
+    * **Collect** all $s$ values from `Member.stations`, `PointLoad`, `Support`, and `Connection`.
+    * **Deduplicate** using `math.isclose` with tolerance (e.g., `merge_tol/L`).
+    * **Sort** `[0.0, ..., 1.0]`.
+    * **P-Delta Refinement**: If `formulation="pdelta"`, force insertion of at least one mid-point station ($s=0.5$) to capture member curvature.
   * create analysis nodes at stations
   * split members into analysis elements
   * apply end-to-station connectivity (node sharing) by wiring endpoints to the inserted station node
@@ -250,10 +256,12 @@ analysis/transformations.py
 ```
 
 * Local/global coordinate transforms:
-
   * direction cosines
   * rotation matrices
   * building element transformation `T`
+  * **Vertical Member Handling**: 
+    * Detects if member is parallel to global up vector.
+    * Falls back to "Global North" or "Global East" reference to resolve orientation ambiguity.
   * (second-order) updated orientation/corotational helpers if you implement them
 
 ```
@@ -269,10 +277,13 @@ analysis/elements/beam3d.py
 ```
 
 * Beam element routines (core structural element):
-
   * local stiffness `k_material(E, G, A, Iy, Iz, J, L, ...)`
   * geometric stiffness `k_geometric(N, L, ...)` (for p-delta)
   * fixed-end/equivalent nodal loads for member loads (if you implement here)
+  * **Static Condensation**:
+    * Handle releases at the **Element Level**.
+    * Partition $K_e$ and condense out released DOFs before returning to assembler.
+    * Store **Condensation Matrix** ($K_{cc}^{-1} K_{cr}$) for instant internal DOF recovery.
   * recovery: end forces from `u_local`, section forces along stations
 * Keep functions testable and mostly pure.
 
@@ -301,10 +312,9 @@ analysis/assembly.py
 ```
 
 * Global system building:
-
   * DOF numbering (map each analysis node DOF to equation index)
   * assemble global `K` and `F`
-  * apply releases at element level (via element stiffness modification/condensation)
+  * apply releases: Already handled by `Beam3D` returning condensed matrices.
   * apply supports/constraints (restraints, prescribed displacements, springs)
 * Output: assembled system (and bookkeeping to compute reactions)
 
@@ -358,7 +368,7 @@ results/frame_result.py
 ```
 
 * `FrameResult` dataclass:
-
+  * **Standalone Snapshot**: Indexed by element IDs at time of solve. Does not reference mutable Frame state.
   * node displacements (by original node id and/or analysis node id)
   * reactions at supports
   * per-element end forces
@@ -507,3 +517,25 @@ Same shape, different semantics.
 ---
 
 If you want, I can also propose the *imports direction* rule (who is allowed to import whom) to prevent circular imports—this matters a lot once `frame.py` has convenience methods calling `analysis`.
+
+---
+
+## Architecture Rules
+
+### 1. The "Import Direction" Rule
+
+To prevent circular dependencies, adhere to this one-way dependency stack:
+
+1.  **Level 0 (Base)**: `dof.py`, `nodes.py`, `materials.py` (no imports from other levels).
+2.  **Level 1 (Entities)**: `member.py`, `connections.py` (imports Level 0).
+3.  **Level 2 (Container)**: `frame.py` (imports Level 0 & 1). **Never** imports `analysis/` or `results/` at module level.
+4.  **Level 3 (Scenario)**: `loadcase.py`, `supports.py` (imports Level 2).
+5.  **Level 4 (Mechanics)**: `analysis/` (imports Frame, LoadCase).
+6.  **Level 5 (Output)**: `results/`, `viz/`, `design/` (imports all below).
+
+**Injection/Delegation**: If `Frame` needs to `analyze()`, use a local import inside the method:
+```python
+def analyze(self, ...):
+    from beamy.analysis import run_analysis
+    return run_analysis(self, ...)
+```

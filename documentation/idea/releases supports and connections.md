@@ -1,9 +1,3 @@
-Yes — that statement is **correct**.
-And importantly, it’s not just “conceptually reasonable”; it matches how essentially all serious frame solvers separate responsibilities.
-
-Let me tighten each sentence just a little so it’s *precise* rather than just intuitive.
-
----
 
 ## 1️⃣ Releases
 
@@ -24,6 +18,20 @@ So this is right:
 * member-level
 * end-specific
 * stiffness-related
+
+### Implementation: Static Condensation
+
+For a professional FEA implementation, use **Static Condensation** rather than soft springs.
+
+1.  **Element Level**: Perform condensation inside `beam3d.py`.
+2.  **Partition** the element stiffness matrix $K_e$ into retained ($r$) and released ($c$) degrees of freedom.
+3.  **Condense** the matrix:
+    $$K_{condensed} = K_{rr} - K_{rc} K_{cc}^{-1} K_{cr}$$
+4.  **Store** the condensation matrix ($K_{cc}^{-1} K_{cr}$) on the Element for instant recovery.
+5.  **Assemble** $K_{condensed}$ into the global system.
+6.  **Recover** displacements for the released DOFs using the stored matrix after solving global $u$.
+
+This ensures the released behavior is mathematically exact and avoids numerical instability.
 
 ---
 
@@ -84,6 +92,12 @@ You can summarize the entire architecture like this:
 | **Support**    | Which DOFs are restrained to ground for this case?   | `LoadCase` |
 
 None of these imply the others.
+
+**Implementation note (aligns with `idea.md`)**
+
+- **DOF order (3D)**: `[UX, UY, UZ, RX, RY, RZ]`
+- **Release masks** (on `Member`): True = released (that member end does *not* transmit that component)
+- **Restraint masks** (on `Support`): True = restrained (fixed to ground for that load case)
 
 ---
 

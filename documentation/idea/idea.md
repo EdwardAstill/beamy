@@ -25,18 +25,21 @@ Keep Nodes simple, but add a tolerance-friendly identity strategy at Frame level
 * `group: str | None = None`
 * `meta: dict = {}`
 
-> I’d rename `node_i/node_j` to `end_i/end_j` to make “member ends” a first-class concept.
 
 ### B) Properties (structural)
 
-* `material: MaterialRef`
-* `section: SectionRef`
+* `material: MaterialRef` (resolved from Frame registry)
+* `section: SectionRef` (resolved from Frame registry)
 * `orientation: OrientationDef`
   One of:
 
   * `local_z: Vec3`
   * `roll_angle: float`
   * `ref_node: NodeId`
+* **DesignProperties**: Separate physical length from design parameters.
+  * `Lx`, `Ly` (unbraced lengths)
+  * `Kx`, `Ky`, `Kz` (effective length factors)
+  * `Cb` (moment gradient factor)
 
 ### C) End behavior (connection stiffness modifiers)
 
@@ -67,7 +70,6 @@ This avoids mixing “topology facts” with “mesh constraints”. A station i
 
 Keep it minimal but explicit:
 
-* `geom_nonlinear: bool = True`
 * `formulation: Literal["linear","pdelta","corotational"] = "pdelta"`
 * `integration_points: int = 2` (optional)
 
@@ -86,8 +88,25 @@ Keep these orchestration helpers, but don’t store state:
 
 ### A) Topology
 
-* `nodes: dict[NodeId, Node]`
 * `members: dict[MemberId, Member]`
+* `nodes: dict[NodeId, Node]`
+* **Registries**: `materials: dict[str, Material]`, `sections: dict[str, Section]`
+
+**Recommended workflow (explicit)**
+
+* Define materials and sections in the registry.
+* Create nodes first (`Frame.add_node(...)`), then create members referencing those node ids, then add members to the frame.
+* After all members (and any explicit connections) are added, call a `Frame.build()` method (or do this automatically at the start of `analyze()`).
+
+**What `Frame.build()` should do**
+
+* Validate references (each `Member.end_i/end_j` exists in `Frame.nodes`, no duplicate ids, material/section IDs exist in registry, etc.).
+* Create implicit connectivity: member ends that share the same `NodeId` are a joint (no extra “connection object” required).
+* Materialize split requirements via **Automated Station Discovery**:
+  * for every `EndToStation(... target=StationRef(member_id, s) ...)`, ensure `s` exists in that member’s `Member.stations`
+  * for every load/support targeting a `StationRef`, ensure the station exists too
+  * Point load locations.
+* (Optionally) normalize/clean stations (dedupe, clamp to 0..1, drop ~0/~1 if you don’t want end-stations).
 
 ### B) Connectivity constraints
 
@@ -153,7 +172,7 @@ Note: supports can target a StationRef; analysis will create the node and apply 
 ## Results (output only)
 
 * `FrameResult` includes:
-
+  * **Standalone Snapshot**: Indexed by element IDs at time of solve.
   * `u: dict[AnalysisNodeId, dof_values]`
   * `reactions: dict[AnalysisNodeId, dof_values]`
   * `element_end_forces: dict[ElementId, EndForces]`
@@ -201,10 +220,13 @@ This keeps second-order out of the user model and makes your nonlinear implement
 * **Topology connections** live in `Frame.connections` as typed objects (EndToStation, etc.)
 * **Meshing stations** live in `Member.stations` (a set of `s` positions)
 
-During `Frame.connect_end_to_member(...)`, you:
+During `Frame.connect_end_to_member(...)`, you record the intent:
 
 * add a `Connection(EndToStation(...))`
-* also add the station `s` into the target member’s `stations` set (so analysis knows it must split there)
+
+Then `Frame.build()` / `analyze()` materializes the split requirement:
+
+* ensure the target member has station `s` in `Member.stations` (so analysis knows it must split there)
 
 ### 2) Remove `Connection.data: dict`
 
@@ -212,7 +234,7 @@ Use typed fields. You’ll thank yourself later when validating and debugging.
 
 ### 3) Add second-order readiness to Member
 
-Minimal flags: `geom_nonlinear` + `formulation`.
+Minimal flag: `formulation` (e.g. `"linear"`, `"pdelta"`, `"corotational"`).
 
 ### 4) Keep Frame/Member state immutable-ish
 
@@ -231,7 +253,11 @@ Vec3 = Tuple[float, float, float]
 NodeId = str
 MemberId = str
 
-DofMask6 = Tuple[bool, bool, bool, bool, bool, bool]  # True=released (member end) OR restrained (support) depending on context
+# Convention (3D frame):
+# DOF order = [UX, UY, UZ, RX, RY, RZ]
+Mask6 = Tuple[bool, bool, bool, bool, bool, bool]
+ReleaseMask6 = Mask6     # member end releases: True = released (no stiffness transmitted)
+RestraintMask6 = Mask6   # supports/restraints: True = restrained (fixed to ground)
 
 # --- Core ---
 
@@ -246,6 +272,15 @@ class Orientation:
     local_z: Optional[Vec3] = None
     roll_angle: Optional[float] = None
     ref_node: Optional[NodeId] = None
+    # If vertical, solver will fall back to Global North/East
+
+@dataclass(frozen=True)
+class DesignProperties:
+    Lx: Optional[float] = None
+    Ly: Optional[float] = None
+    Kx: float = 1.0
+    Ky: float = 1.0
+    Cb: float = 1.0
 
 @dataclass(frozen=True)
 class Member:
@@ -256,14 +291,15 @@ class Member:
     material_id: str
     section_id: str
     orientation: Orientation = Orientation()
-    releases_i: DofMask6 = (False, False, False, False, False, False)
-    releases_j: DofMask6 = (False, False, False, False, False, False)
+    design: DesignProperties = DesignProperties()
+    releases_i: ReleaseMask6 = (False, False, False, False, False, False)
+    releases_j: ReleaseMask6 = (False, False, False, False, False, False)
 
-    # meshing stations (0..1), no loads here
+    # meshing stations (0..1), no loads here.
+    # Store as a unique, sorted tuple for immutability + stable behavior.
     stations: Tuple[float, ...] = ()
 
     # second-order controls
-    geom_nonlinear: bool = True
     formulation: Literal["linear", "pdelta", "corotational"] = "pdelta"
     integration_points: int = 2
 
@@ -283,9 +319,9 @@ class StationRef:
 @dataclass(frozen=True)
 class EndToStation:
     kind: Literal["end_to_station"] = "end_to_station"
-    end: EndRef = None           # type: ignore
-    target: StationRef = None    # type: ignore
-    dofs: Optional[DofMask6] = None  # None = all relevant DOFs
+    end: EndRef
+    target: StationRef
+    dofs: Optional[Mask6] = None  # None = all relevant DOFs
 
 Connection = Union[EndToStation]  # later add MPC, rigid links, etc.
 
@@ -294,19 +330,26 @@ class Frame:
     nodes: Dict[NodeId, Node] = field(default_factory=dict)
     members: Dict[MemberId, Member] = field(default_factory=dict)
     connections: List[Connection] = field(default_factory=list)
+    # Registries
+    materials: Dict[str, Any] = field(default_factory=dict) # Replace Any with Material type
+    sections: Dict[str, Any] = field(default_factory=dict)  # Replace Any with SectionRegistry type
+
+    # SectionRegistry should implement __getitem__ to auto-load standard shapes (e.g. AISC)
+    # if key missing but looks like "W14x90"
 
     merge_tol: float = 1e-6
 
-    def connect_end_to_member(self, end: EndRef, target: StationRef, dofs: Optional[DofMask6] = None) -> None:
+    def connect_end_to_member(self, end: EndRef, target: StationRef, dofs: Optional[Mask6] = None) -> None:
         self.connections.append(EndToStation(end=end, target=target, dofs=dofs))
-        # also ensure a split station exists on target member (copy-on-write if using frozen dataclass)
-        # (implementation detail)
+        # build()/analyze() should ensure any referenced StationRef exists in Member.stations.
 
     def validate(self) -> None:
         pass
 
     def analyze(self, load_case, settings=None):
-        pass
+        # Local import to enforce one-way dependency (Level 2 -> Level 4)
+        from beamy.analysis.engine import run_analysis
+        return run_analysis(self, load_case, settings)
 
     def plot(self, result=None, **kwargs):
         pass
