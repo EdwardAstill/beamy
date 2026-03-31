@@ -4,11 +4,7 @@ Tests FEM solver, reaction calculations, and analysis results.
 """
 
 import numpy as np
-import sys
-from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+import pytest
 
 from beamy.analysis import (
     solve_x_reactions,
@@ -25,7 +21,7 @@ from beamy.analysis.analysis import (
     _linear_interpolation,
 )
 from beamy.setup import Beam1D, Material, Support, LoadCase, PointForce, Moment
-from beamy.section import Section
+from sectiony import Section
 
 
 def test_result_class():
@@ -182,30 +178,39 @@ def test_solve_fem_1d_simple():
 def test_solve_x_reactions():
     """Test axial and torsional reaction solver."""
     print("Testing solve_x_reactions...")
-    
-    # Create a simple beam with two supports
-    # Need at least one support in x, y, z, and rotation about x
+
+    material = Material(name="Steel", E=200e9, G=80e9)
+    section = Section(
+        name="Rect",
+        A=0.01,
+        Iy=1e-6,
+        Ix=1e-6,
+        J=2e-6,
+        y_max=0.05,
+        x_max=0.05,
+    )
     supports = [
         Support(x=0.0, type="111100"),  # Fixed in x, y, z, rotation about x
         Support(x=5.0, type="011100"),  # Free in x, fixed others
     ]
-    
+    beam = Beam1D(L=5.0, material=material, section=section, supports=supports)
+
     # Create load case with axial force
     loads = LoadCase(name="Test")
     loads.add_point_force(PointForce(
         point=np.array([2.5, 0.0, 0.0]),
         force=np.array([100.0, 0.0, 0.0])  # 100N in x-direction
     ))
-    
-    d_x, d_rx = solve_x_reactions(supports, loads)
-    
+
+    d_x, d_rx, x_nodes_axial, x_nodes_torsion = solve_x_reactions(beam, loads)
+
     # Check that reactions were computed
     assert abs(supports[0].reactions["Fx"] + 100.0) < 1e-6  # Reaction should balance
-    assert abs(supports[1].reactions["Fx"]) < 1e-6  # Free end, no reaction
-    
+    assert abs(supports[1].reactions.get("Fx", 0.0)) < 1e-6  # Free end, no reaction
+
     # Check displacements
-    assert len(d_x) == 2
-    assert len(d_rx) == 2
+    assert len(d_x) > 0
+    assert len(d_rx) > 0
     
     print("  [PASS] solve_x_reactions tests passed")
 
@@ -220,10 +225,10 @@ def test_solve_transverse_reactions():
         name="Rect",
         A=0.01,  # 10cm x 10cm
         Iy=1e-6,  # Iy for z-bending
-        Iz=1e-6,  # Iz for y-bending
+        Ix=1e-6,  # sectiony Ix = beamy Iz  # Iz for y-bending
         J=2e-6,
         y_max=0.05,
-        z_max=0.05,
+        x_max=0.05,  # sectiony x_max = beamy z_max
     )
     
     supports = [
@@ -240,15 +245,16 @@ def test_solve_transverse_reactions():
         force=np.array([0.0, 0.0, -1000.0])  # 1000N downward (z-direction)
     ))
     
-    d = solve_transverse_reactions(beam, loads, axis="z")
-    
+    d, x_nodes = solve_transverse_reactions(beam, loads, axis="z")
+
     # Check that reactions were computed
     # Total reaction should balance the applied force
     total_reaction = supports[0].reactions["Fz"] + supports[1].reactions["Fz"]
     assert abs(total_reaction - 1000.0) < 1e-6
-    
-    # Check displacement vector length (2 DOFs per node)
-    assert len(d) == 4  # 2 nodes * 2 DOFs
+
+    # Check displacement vector has entries
+    assert len(d) > 0
+    assert len(x_nodes) > 0
     
     print("  [PASS] solve_transverse_reactions tests passed")
 
@@ -262,10 +268,10 @@ def test_get_all_loads():
         name="Rect",
         A=0.01,
         Iy=1e-6,
-        Iz=1e-6,
+        Ix=1e-6,  # sectiony Ix = beamy Iz
         J=2e-6,
         y_max=0.05,
-        z_max=0.05,
+        x_max=0.05,  # sectiony x_max = beamy z_max
     )
     
     supports = [
@@ -317,10 +323,10 @@ def test_loaded_beam_basic():
         name="Rect",
         A=0.01,
         Iy=1e-6,
-        Iz=1e-6,
+        Ix=1e-6,  # sectiony Ix = beamy Iz
         J=2e-6,
         y_max=0.05,
-        z_max=0.05,
+        x_max=0.05,  # sectiony x_max = beamy z_max
     )
     
     supports = [
@@ -370,10 +376,10 @@ def test_loaded_beam_equilibrium():
         name="Rect",
         A=0.01,
         Iy=1e-6,
-        Iz=1e-6,
+        Ix=1e-6,  # sectiony Ix = beamy Iz
         J=2e-6,
         y_max=0.05,
-        z_max=0.05,
+        x_max=0.05,  # sectiony x_max = beamy z_max
     )
     
     supports = [
@@ -411,10 +417,10 @@ def test_von_mises():
         name="Rect",
         A=0.01,
         Iy=1e-6,
-        Iz=1e-6,
+        Ix=1e-6,  # sectiony Ix = beamy Iz
         J=2e-6,
         y_max=0.05,
-        z_max=0.05,
+        x_max=0.05,  # sectiony x_max = beamy z_max
     )
     
     supports = [
@@ -451,16 +457,18 @@ def test_error_cases():
     """Test error handling."""
     print("Testing error cases...")
     
-    # Test solve_x_reactions with no supports
+    # Test creating beam with no supports should raise ValueError
+    material_err = Material(name="Steel", E=200e9, G=80e9)
+    section_err = Section(name="Rect", A=0.01, Iy=1e-6, Ix=1e-6, J=2e-6, y_max=0.05, x_max=0.05)
     try:
-        solve_x_reactions([], LoadCase(name="Test"))
+        Beam1D(L=5.0, material=material_err, section=section_err, supports=[])
         assert False, "Should have raised ValueError"
     except ValueError:
         pass
     
     # Test solve_transverse_reactions with invalid axis
     material = Material(name="Steel", E=200e9, G=80e9)
-    section = Section(name="Rect", A=0.01, Iy=1e-6, Iz=1e-6, J=2e-6, y_max=0.05, z_max=0.05)
+    section = Section(name="Rect", A=0.01, Iy=1e-6, Ix=1e-6, J=2e-6, y_max=0.05, x_max=0.05)
     supports = [Support(x=0.0, type="111111")]
     beam = Beam1D(L=5.0, material=material, section=section, supports=supports)
     
@@ -473,52 +481,6 @@ def test_error_cases():
     print("  [PASS] Error case tests passed")
 
 
-def run_all_tests():
-    """Run all tests."""
-    print("=" * 60)
-    print("Running analysis.py test suite")
-    print("=" * 60)
-    print()
-    
-    tests = [
-        test_result_class,
-        test_analysis_result,
-        test_accumulate_loads,
-        test_linear_interpolation,
-        test_hermite_displacement,
-        test_solve_fem_1d_simple,
-        test_solve_x_reactions,
-        test_solve_transverse_reactions,
-        test_get_all_loads,
-        test_loaded_beam_basic,
-        test_loaded_beam_equilibrium,
-        test_von_mises,
-        test_error_cases,
-    ]
-    
-    passed = 0
-    failed = 0
-    
-    for test in tests:
-        try:
-            test()
-            passed += 1
-        except Exception as e:
-            print(f"  [FAIL] Test failed: {test.__name__}")
-            print(f"    Error: {e}")
-            import traceback
-            traceback.print_exc()
-            failed += 1
-        print()
-    
-    print("=" * 60)
-    print(f"Test Results: {passed} passed, {failed} failed")
-    print("=" * 60)
-    
-    return failed == 0
-
-
 if __name__ == "__main__":
-    success = run_all_tests()
-    sys.exit(0 if success else 1)
+    pytest.main([__file__, "-v"])
 

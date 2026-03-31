@@ -205,8 +205,8 @@ def solve_x_reactions(
     n_nodes_torsion = len(nodes_torsion)
     
     # Get Shear Center offsets
-    sc_y = getattr(beam.section, 'SCy', 0.0)
-    sc_z = getattr(beam.section, 'SCz', 0.0)
+    sc_y = getattr(beam.section, 'SCy', None) or 0.0
+    sc_z = getattr(beam.section, 'SCx', None) or 0.0  # sectiony SCx = beamy SCz
     
     # 2. Load Builder for torsion with SC correction
     def build_load_fn_torsion(nodes, ndof):
@@ -303,7 +303,7 @@ def solve_transverse_reactions(beam: Beam1D, loads: LoadCase, axis: str = "z") -
         # DOFs: Uy (idx 1), Rz (idx 5)
         trans_idx, rot_idx = 1, 5
         shear_key, moment_key = "Fy", "Mz"
-        I_attr = "Iz"
+        I_attr = "Ix"  # sectiony Ix = beamy Iz (about z-axis, using y-distances)
         shear_pairs, moment_pairs = loads.Fys, loads.Mzs
 
     E = beam.material.E
@@ -857,7 +857,7 @@ class LoadedBeam:
             shear_key, moment_key = "Fy", "Mz"
             d_vec = self._d_y
             x_nodes = self._x_nodes_y
-            I = self.beam.section.Iz
+            I = self.beam.section.Ix  # sectiony Ix = beamy Iz
             c = self.beam.section.y_max
             A = self.beam.section.A
         else:
@@ -867,7 +867,7 @@ class LoadedBeam:
             d_vec = self._d_z
             x_nodes = self._x_nodes_z
             I = self.beam.section.Iy
-            c = self.beam.section.z_max
+            c = self.beam.section.x_max  # sectiony x_max = beamy z_max
             A = self.beam.section.A
 
         # 1. Filter Loads
@@ -927,7 +927,7 @@ class LoadedBeam:
             x_nodes = self._x_nodes_torsion
             d_vec = self._d_rx
             # Torsion stress tau = T*r/J. Use max dimension as conservative r
-            r_max = max(abs(self.beam.section.y_max), abs(self.beam.section.z_max))
+            r_max = max(abs(self.beam.section.y_max), abs(self.beam.section.x_max))
             stress_factor = r_max / prop_J if prop_J > 0 else 0.0
             
         # 1. Filter Loads

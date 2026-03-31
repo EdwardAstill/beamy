@@ -1,21 +1,13 @@
-import sys
-from pathlib import Path
-
-# Add the src directory to the path so we can import beamy as a package
-src_path = Path(__file__).parent.parent / "src"
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
 import numpy as np
 import matplotlib.pyplot as plt
-from sectiony.library import i_section
+from sectiony.library import i
 from sectiony.stress import Stress
 from beamy import Beam1D, Material, Support, LoadCase, PointForce, Moment, LoadedBeam
 
 def test_section_stress():
     # 1. Setup Beam
     # I-beam: d=200, b=100, tf=10, tw=6
-    section = i_section(d=0.2, b=0.1, tf=0.01, tw=0.006, r=0.0)
+    section = i(d=0.2, b=0.1, tf=0.01, tw=0.006, r=0.0)
     steel = Material(name="Steel", E=210e9, G=80e9)
     
     supports = [
@@ -66,10 +58,10 @@ def test_section_stress():
         section=section,
         N=N,
         Vy=Vy,
-        Vz=Vz,
+        Vx=Vz,   # beamy Vz → sectiony Vx
         Mx=Mx,
         My=My,
-        Mz=Mz
+        Mz=Mz,
     )
     
     # 5. Plot using sectiony's built-in plotting
@@ -79,7 +71,7 @@ def test_section_stress():
     
     # Use sectiony's plot method
     stress.plot(
-        stress_type="total",
+        stress_type="von_mises",
         ax=ax,
         show=False,
         cmap="plasma"
@@ -94,7 +86,7 @@ def test_section_stress():
     ax.set_title(f"Section Stress at x={x_loc}\n(Axial + Bending + Torsion)")
     plt.axis('equal')
     plt.grid(True, alpha=0.3)
-    plt.show()
+    plt.close(fig)
 
 if __name__ == "__main__":
     test_section_stress()

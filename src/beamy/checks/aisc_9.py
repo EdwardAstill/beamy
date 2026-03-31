@@ -243,7 +243,7 @@ def _strong_axis_checks(
 ) -> Dict[str, Any]:
     """Strong-axis checks assuming all inputs already in ksi/inches."""
     moments = loaded.bending("y").action  # Mz from Fy loads (strong axis)
-    modulus = loaded.beam.section.Sz
+    modulus = loaded.beam.section.Sx  # sectiony Sx = beamy Sz (strong-axis)
     Fy = beam.material.Fy
     if Fy is None:
         raise ValueError("Material.Fy is required for strong-axis checks.")
@@ -471,7 +471,7 @@ def _box_tube_checks(
 ) -> Dict[str, Any]:
     """Box/tube checks assuming all inputs already in ksi/inches."""
     moments = loaded.bending("y").action  # Use strong-axis moment for RHS/CHS
-    modulus = loaded.beam.section.Sz
+    modulus = loaded.beam.section.Sx  # sectiony Sx = beamy Sz (strong-axis)
     Fy = beam.material.Fy
     if Fy is None:
         raise ValueError("Material.Fy is required for box/tube checks.")
@@ -658,7 +658,7 @@ def aisc_9_check(
     # Convert section properties
     A_in2 = conv(beam.section.A, f"{length_unit}2", "in2")
     Iy_in4 = conv(beam.section.Iy, f"{length_unit}4", "in4")
-    Iz_in4 = conv(beam.section.Iz, f"{length_unit}4", "in4")
+    Iz_in4 = conv(beam.section.Ix, f"{length_unit}4", "in4")  # sectiony Ix = beamy Iz
     J_in4 = conv(beam.section.J, f"{length_unit}4", "in4")
     
     Sy_in3 = None
@@ -666,8 +666,8 @@ def aisc_9_check(
         Sy_in3 = conv(beam.section.Sy, f"{length_unit}3", "in3")
     
     Sz_in3 = None
-    if hasattr(beam.section, "Sz") and beam.section.Sz is not None:
-        Sz_in3 = conv(beam.section.Sz, f"{length_unit}3", "in3")
+    if hasattr(beam.section, "Sx") and beam.section.Sx is not None:
+        Sz_in3 = conv(beam.section.Sx, f"{length_unit}3", "in3")  # sectiony Sx = beamy Sz
 
     # Convert section dimensions
     dims_in: Dict[str, float] = {}
@@ -701,12 +701,12 @@ def aisc_9_check(
         name=beam.section.name,
         A=A_in2,
         Iy=Iy_in4,
-        Iz=Iz_in4,
+        Ix=Iz_in4,      # sectiony Ix = beamy Iz
         J=J_in4,
         Sy=Sy_in3,
-        Sz=Sz_in3,
+        Sx=Sz_in3,      # sectiony Sx = beamy Sz
         y_max=conv(beam.section.y_max, length_unit, "in") if beam.section.y_max else None,
-        z_max=conv(beam.section.z_max, length_unit, "in") if beam.section.z_max else None,
+        x_max=conv(beam.section.x_max, length_unit, "in") if beam.section.x_max else None,
     )
     # Attach dimensions
     section_in.dimensions = dims_in
